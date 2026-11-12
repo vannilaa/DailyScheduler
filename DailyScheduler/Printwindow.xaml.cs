@@ -552,7 +552,7 @@ namespace DailyScheduler
             // middle: QR code of the full serial
             Place(grid, MakeQr(serial, Mm(0.3)), 1, 1, 1);
             // right: Part Number (reads top to bottom)
-            Place(grid, FitText(_product.PartNumber, font, true, 90, pad), 1, 2, 1);
+            Place(grid, FitText(_product.PartNumber, font, true, -90, pad), 1, 2, 1);
             // bottom: serial
             Place(grid, FitText(serial, font, true, 0, pad), 2, 0, 3);
 

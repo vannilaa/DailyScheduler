@@ -114,9 +114,9 @@
                     </StackPanel>
                 </ScrollViewer>
 
-                <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
-                    <Button x:Name="btnTest" Content="Cetak Tes" Width="130" Padding="5" Margin="5" FontSize="20" Click="btnTest_Click"/>
-                    <Button x:Name="btnPrint" Content="Cetak" Width="120" Padding="5" Margin="5" FontSize="20" Click="btnPrint_Click"/>
+                <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,12,0,0">
+                    <Button x:Name="btnTest" Content="Cetak Tes" Width="100" Padding="5" Margin="5" FontSize="20" Click="btnTest_Click"/>
+                    <Button x:Name="btnPrint" Content="Cetak" Width="100" Padding="5" Margin="5" FontSize="20" Click="btnPrint_Click"/>
                     <Button x:Name="btnClose" Content="Tutup" Width="100" Padding="5" Margin="5" FontSize="20" Click="btnClose_Click"/>
                 </StackPanel>
             </Grid>
