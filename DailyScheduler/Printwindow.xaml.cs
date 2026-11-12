@@ -1,0 +1,609 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Linq;
+using System.Printing;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Documents;
+using System.Windows.Input;
+using System.Windows.Markup;
+using System.Windows.Media;
+using System.Windows.Shapes;
+using QRCoder;
+
+namespace DailyScheduler
+{
+    /// <summary>
+    /// Prints serial stickers for ONE schedule row.
+    /// One printed "lembar" (strip) is 10 cm wide and holds 5 stickers of 2x2 cm, or 4 stickers of 2.5x2.5 cm.
+    /// Each sticker: QR code in the middle, Job No + Model on the left (vertical), Part Number on the right (vertical),
+    /// Position + Part on top, and the serial (date.map code.barcode.number) at the bottom.
+    /// </summary>
+    public partial class PrintWindow : Window
+    {
+        private const int MaxStickers = 20000;     // safety limit for one print job
+        private const int MaxPreviewStrips = 8;    // the preview only shows the first strips
+        private const double StripMm = 100;        // strip width (all layouts)
+
+        // Remembered while the program runs, so the user does not have to pick it again for every row.
+        private static int _lastLayout = 0;
+        private static int _lastRotation = 0;
+
+        private readonly ProductInfo _product;
+        private readonly DateTime _date;
+        private readonly string _mapCode;
+        private readonly string _lineName;
+        private readonly int _jumlah;
+        private readonly string _rowPrinter;
+        private readonly Dictionary<string, PrintQueue> _queues =
+            new Dictionary<string, PrintQueue>(StringComparer.OrdinalIgnoreCase);
+
+        private List<int> _numbers = new List<int>();
+        private bool _ready;   // false while the window is still being built (ignore the events that fires)
+
+        public PrintWindow(ScheduleRow row, DateTime date, LineProduction line)
+        {
+            InitializeComponent();
+
+            _product = ScheduleRow.Products[row.Barcode];
+            _date = date;
+            _mapCode = line.MapCode;
+            _lineName = line.Name;
+            _jumlah = row.Jumlah;
+            _rowPrinter = row.Printer;
+
+            tbFrom.GotKeyboardFocus += delegate { rbRange.IsChecked = true; };
+            tbTo.GotKeyboardFocus += delegate { rbRange.IsChecked = true; };
+            tbList.GotKeyboardFocus += delegate { rbList.IsChecked = true; };
+
+            cbLayout.SelectedIndex = _lastLayout;
+            cbRotation.SelectedIndex = _lastRotation;
+
+            txtProduct.Text = _product.PartNumber + (string.IsNullOrEmpty(_product.Model) ? "" : " - " + _product.Model);
+            txtInfo.Text = (_product.Customer ?? "") +
+                           "\nJumlah: " + _jumlah.ToString("N0", CultureInfo.CurrentCulture) +
+                           "   |   Tanggal: " + _date.ToString("dd-MM-yyyy", CultureInfo.InvariantCulture) +
+                           "\nLine: " + _lineName + " (" + _mapCode + ")   |   Barcode: " + _product.Barcode;
+
+            LoadPrinters();
+
+            _ready = true;
+            UpdateAll();
+        }
+
+        // ------------------------------------------------------------------ printers
+
+        private void LoadPrinters()
+        {
+            try
+            {
+                var server = new LocalPrintServer();
+                var types = new[] { EnumeratedPrintQueueTypes.Local, EnumeratedPrintQueueTypes.Connections };
+                foreach (PrintQueue q in server.GetPrintQueues(types))
+                    _queues[q.FullName] = q;
+            }
+            catch (Exception ex)
+            {
+                txtPrinterNote.Text = "Daftar printer tidak bisa dibaca: " + ex.Message;
+            }
+
+            cbPrinter.ItemsSource = _queues.Keys.OrderBy(k => k, StringComparer.OrdinalIgnoreCase).ToList();
+
+            // The row's printer if this computer has it, otherwise the Windows default printer (and say so).
+            string pick = null;
+            if (!string.IsNullOrEmpty(_rowPrinter))
+                pick = _queues.Keys.FirstOrDefault(k => string.Equals(k, _rowPrinter, StringComparison.OrdinalIgnoreCase));
+
+            if (pick == null)
+            {
+                if (!string.IsNullOrEmpty(_rowPrinter))
+                    txtPrinterNote.Text = "Printer \"" + _rowPrinter + "\" tidak ada di komputer ini. Pilih printer lain.";
+                try { pick = LocalPrintServer.GetDefaultPrintQueue().FullName; }
+                catch (Exception) { }
+            }
+
+            if (pick != null && _queues.ContainsKey(pick)) cbPrinter.SelectedItem = pick;
+        }
+
+        // ------------------------------------------------------------------ which stickers
+
+        private void Input_Changed(object sender, RoutedEventArgs e)
+        {
+            UpdateAll();
+        }
+
+        private void Digits_PreviewTextInput(object sender, TextCompositionEventArgs e)
+        {
+            e.Handled = !e.Text.All(c => c >= '0' && c <= '9');
+        }
+
+        // The three strip layouts (same order as the Ukuran stiker dropdown). Every strip is 10 cm wide.
+        private static readonly int[] PerStripByLayout = { 5, 4, 8 };
+        private static readonly double[] HeightMmByLayout = { 20, 25, 15 };
+
+        private int LayoutIndex { get { return Math.Max(0, Math.Min(cbLayout.SelectedIndex, PerStripByLayout.Length - 1)); } }
+        private int StickerPerStrip { get { return PerStripByLayout[LayoutIndex]; } }
+        private double StickerH { get { return HeightMmByLayout[LayoutIndex]; } }
+        private double StickerW { get { return StripMm / StickerPerStrip; } }   // 20, 25 or 12.5 mm
+        private double RotationAngle { get { return Math.Max(0, cbRotation.SelectedIndex) * 90.0; } }
+
+        private static bool TryInt(string s, out int value)
+        {
+            return int.TryParse(s.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out value);
+        }
+
+        /// <summary>Reads the options and returns the sticker numbers (sorted, no duplicates). error != null when the input is wrong.</summary>
+        private List<int> ParseSelection(out string error)
+        {
+            error = null;
+            var none = new List<int>();
+            var segments = new List<int[]>();   // each = { from, to }
+
+            if (rbAll.IsChecked == true)
+            {
+                segments.Add(new[] { 1, _jumlah });
+            }
+            else if (rbRange.IsChecked == true)
+            {
+                int from = 1, to = _jumlah;
+                if (!string.IsNullOrWhiteSpace(tbFrom.Text) && !TryInt(tbFrom.Text, out from)) { error = "Isi \"Dari\" dengan angka."; return none; }
+                if (!string.IsNullOrWhiteSpace(tbTo.Text) && !TryInt(tbTo.Text, out to)) { error = "Isi \"Sampai\" dengan angka."; return none; }
+                if (from < 1 || to > _jumlah || from > to)
+                {
+                    error = "Rentang harus antara 1 dan " + _jumlah + ", dan \"Dari\" tidak boleh lebih besar dari \"Sampai\".";
+                    return none;
+                }
+                segments.Add(new[] { from, to });
+            }
+            else
+            {
+                if (string.IsNullOrWhiteSpace(tbList.Text)) return none;   // nothing typed yet: no error, just nothing to print
+
+                foreach (string token in tbList.Text.Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries))
+                {
+                    int a = 0, b = 0;
+                    bool ok;
+                    int dash = token.IndexOf('-');
+                    if (dash > 0)   // "10-20"
+                        ok = TryInt(token.Substring(0, dash), out a) && TryInt(token.Substring(dash + 1), out b);
+                    else            // "80"
+                    {
+                        ok = TryInt(token, out a);
+                        b = a;
+                    }
+
+                    if (!ok) { error = "\"" + token + "\" bukan nomor yang benar."; return none; }
+                    if (a < 1 || b > _jumlah || a > b)
+                    {
+                        error = "\"" + token + "\" di luar batas. Nomor harus antara 1 dan " + _jumlah + ".";
+                        return none;
+                    }
+                    segments.Add(new[] { a, b });
+                }
+            }
+
+            long total = segments.Sum(s => (long)s[1] - s[0] + 1);
+            if (total > MaxStickers)
+            {
+                error = "Terlalu banyak (" + total.ToString("N0", CultureInfo.CurrentCulture) + " stiker). Maksimal " +
+                        MaxStickers.ToString("N0", CultureInfo.CurrentCulture) + " sekali cetak. Pakai Rentang.";
+                return none;
+            }
+
+            var set = new SortedSet<int>();
+            foreach (int[] s in segments)
+                for (int n = s[0]; n <= s[1]; n++) set.Add(n);
+            return set.ToList();
+        }
+
+        private void UpdateAll()
+        {
+            if (!_ready) return;
+
+            string error;
+            _numbers = ParseSelection(out error);
+            txtError.Text = error ?? "";
+
+            int per = StickerPerStrip;
+            int strips = (_numbers.Count + per - 1) / per;
+
+            if (error != null)
+                txtSummary.Text = "";
+            else if (_numbers.Count == 0)
+                txtSummary.Text = "Isi nomor stiker yang mau dicetak.";
+            else
+            {
+                int lastFill = _numbers.Count - (strips - 1) * per;
+                txtSummary.Text = _numbers.Count.ToString("N0", CultureInfo.CurrentCulture) + " stiker = " +
+                                  strips.ToString("N0", CultureInfo.CurrentCulture) + " lembar (" + per + " stiker per lembar)" +
+                                  "\nPertama: " + Serial(_numbers[0]) +
+                                  "\nTerakhir: " + Serial(_numbers[_numbers.Count - 1]) +
+                                  (lastFill < per ? "\nLembar terakhir terisi " + lastFill + " dari " + per + "." : "");
+            }
+
+            btnPrint.IsEnabled = error == null && _numbers.Count > 0 && cbPrinter.SelectedItem != null;
+            BuildPreview();
+        }
+
+        // ------------------------------------------------------------------ the sticker
+
+        private string Serial(int number)
+        {
+            return _date.ToString("yyMMdd", CultureInfo.InvariantCulture) + "." + _mapCode + "." + _product.Barcode + "." +
+                   number.ToString("D4", CultureInfo.InvariantCulture);
+        }
+
+        private static double Mm(double mm) { return mm * 96.0 / 25.4; }   // WPF units are 1/96 inch
+
+        private static string Join(string separator, params string[] parts)
+        {
+            return string.Join(separator, parts.Where(p => !string.IsNullOrWhiteSpace(p)));
+        }
+
+        /// <summary>Text that is shrunk (never enlarged) to fit its cell. angle: 0, -90 (reads bottom to top) or 90.</summary>
+        private static FrameworkElement FitText(string text, double fontSize, bool bold, double angle, double margin)
+        {
+            var tb = new TextBlock
+            {
+                Text = text ?? "",
+                FontFamily = new FontFamily("Arial Narrow, Arial"),
+                FontSize = fontSize,
+                FontWeight = bold ? FontWeights.Bold : FontWeights.SemiBold,
+                Foreground = Brushes.Black,
+                TextWrapping = TextWrapping.NoWrap,
+                TextAlignment = TextAlignment.Center
+            };
+            if (angle != 0) tb.LayoutTransform = new RotateTransform(angle);
+
+            return new Viewbox
+            {
+                Stretch = Stretch.Uniform,
+                StretchDirection = StretchDirection.DownOnly,
+                Margin = new Thickness(margin),
+                Child = tb
+            };
+        }
+
+        /// <summary>QR code drawn as a black shape (no picture, so it stays sharp at any printer resolution).</summary>
+        private static FrameworkElement MakeQr(string text, double margin)
+        {
+            var generator = new QRCodeGenerator();
+            QRCodeData data = generator.CreateQrCode(text, QRCodeGenerator.ECCLevel.M);
+            var m = data.ModuleMatrix;
+            int n = m.Count;
+
+            // The matrix may include a white border; cut it off by looking for the dark modules.
+            int minX = n, minY = n, maxX = -1, maxY = -1;
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                    if (m[y][x])
+                    {
+                        if (x < minX) minX = x;
+                        if (x > maxX) maxX = x;
+                        if (y < minY) minY = y;
+                        if (y > maxY) maxY = y;
+                    }
+            if (maxX < 0) return new Border();
+
+            var geometry = new StreamGeometry();
+            using (StreamGeometryContext ctx = geometry.Open())
+            {
+                for (int y = minY; y <= maxY; y++)
+                {
+                    int x = minX;
+                    while (x <= maxX)
+                    {
+                        if (!m[y][x]) { x++; continue; }
+                        int start = x;
+                        while (x <= maxX && m[y][x]) x++;      // one run of dark modules in this row
+
+                        double x0 = start - minX, x1 = x - minX, y0 = y - minY, y1 = y0 + 1;
+                        ctx.BeginFigure(new Point(x0, y0), true, true);
+                        ctx.LineTo(new Point(x1, y0), false, false);
+                        ctx.LineTo(new Point(x1, y1), false, false);
+                        ctx.LineTo(new Point(x0, y1), false, false);
+                    }
+                }
+            }
+            geometry.Freeze();
+
+            double side = Math.Max(maxX - minX + 1, maxY - minY + 1);
+            var path = new Path
+            {
+                Data = geometry,
+                Fill = Brushes.Black,
+                Width = side,
+                Height = side,
+                Stretch = Stretch.Fill,
+                SnapsToDevicePixels = false
+            };
+            RenderOptions.SetEdgeMode(path, EdgeMode.Aliased);   // no blurry edges between modules
+
+            return new Viewbox { Stretch = Stretch.Uniform, Margin = new Thickness(margin), Child = path };
+        }
+
+        private static void Place(Grid grid, UIElement element, int row, int column, int columnSpan)
+        {
+            Grid.SetRow(element, row);
+            Grid.SetColumn(element, column);
+            Grid.SetColumnSpan(element, columnSpan);
+            grid.Children.Add(element);
+        }
+
+        // ---- The 1.5 cm stock (8 per strip) -------------------------------------------------------------------------
+        // The backing paper (liner) is 12.5 x 15 mm per sticker, but the sticker itself is smaller. These two numbers are the
+        // REAL sticker size. They are a first guess: measure one sticker with a ruler and change them here.
+        private const double CompactStickerWMm = 10.0;
+        private const double CompactStickerHMm = 12.0;
+
+        /// <summary>1.5 cm stock. Left (vertical): map code + date + sticker number. Bottom: part number. The rest: QR code of the full serial.</summary>
+        private FrameworkElement BuildCompactSticker(int number, double cellWMm, double cellHMm)
+        {
+            double sw = Mm(CompactStickerWMm), sh = Mm(CompactStickerHMm);
+            double side = sw * 0.20;      // left text column
+            double bottom = sh * 0.30;    // bottom text row (room for two lines)
+            double pad = Mm(0.15);
+            double font = side * 0.9;     // the text is shrunk from here when it does not fit
+            string serial = Serial(number);
+
+            // long part numbers go on two lines, cut after the first "-"   (73237-BZ010-B11  ->  73237- / BZ010-B11)
+            string pn = _product.PartNumber ?? "";
+            int dash = pn.IndexOf('-');
+            string pnText = (dash > 0 && dash < pn.Length - 1) ? pn.Substring(0, dash + 1) + "\n" + pn.Substring(dash + 1) : pn;
+
+            var sticker = new Grid
+            {
+                Width = sw,
+                Height = sh,
+                Background = Brushes.White,
+                SnapsToDevicePixels = false,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            sticker.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(side) });
+            sticker.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            sticker.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            sticker.RowDefinitions.Add(new RowDefinition { Height = new GridLength(bottom) });
+
+            // left: map code . date + sticker number (e.g. 12.2611120001), over the full height of the sticker
+            string leftText = _mapCode + "." + _date.ToString("yyMMdd", CultureInfo.InvariantCulture) +
+                              number.ToString("D4", CultureInfo.InvariantCulture);
+            FrameworkElement left = FitText(leftText, font, true, -90, pad);
+            Grid.SetRowSpan(left, 2);
+            Place(sticker, left, 0, 0, 1);
+            Place(sticker, MakeQr(serial, Mm(0.2)), 0, 1, 1);
+            Place(sticker, FitText(pnText, font, true, 0, pad), 1, 1, 1);
+
+            // the sticker sits in the middle of its slot on the backing paper
+            var cell = new Grid { Width = Mm(cellWMm), Height = Mm(cellHMm) };
+            cell.Children.Add(sticker);
+            return cell;
+        }
+
+        private FrameworkElement BuildSticker(int number, double wMm, double hMm)
+        {
+            if (wMm < 15) return BuildCompactSticker(number, wMm, hMm);   // the 8-per-strip stock
+
+            double w = Mm(wMm), h = Mm(hMm);
+            double side = w * 0.175;      // left / right text columns
+            double bar = Math.Min(w, h) * 0.16;   // top / bottom text rows
+            double pad = Mm(0.3);
+            double font = bar * 0.85;     // the text is shrunk from here when it does not fit
+            string serial = Serial(number);
+
+            var grid = new Grid { Width = w, Height = h, Background = Brushes.White, SnapsToDevicePixels = false };
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(side) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(side) });
+            grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(bar) });
+            grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(bar) });
+
+            // top: Position + Part
+            Place(grid, FitText(Join(" \u00B7 ", _product.Position, _product.Part), font, true, 0, pad), 0, 0, 3);
+            // left: Job No + Model (reads bottom to top)
+            Place(grid, FitText(Join(" / ", _product.JobNo, _product.Model), font, false, -90, pad), 1, 0, 1);
+            // middle: QR code of the full serial
+            Place(grid, MakeQr(serial, Mm(0.6)), 1, 1, 1);
+            // right: Part Number (reads top to bottom)
+            Place(grid, FitText(_product.PartNumber, font, true, 90, pad), 1, 2, 1);
+            // bottom: serial
+            Place(grid, FitText(serial, font, true, 0, pad), 2, 0, 3);
+
+            return grid;
+        }
+
+        /// <summary>One strip (10 cm wide). Slots without a number stay blank.</summary>
+        private FrameworkElement BuildStrip(IList<int> numbers, double wMm, double hMm, int perStrip)
+        {
+            var panel = new StackPanel { Orientation = Orientation.Horizontal, Background = Brushes.White };
+            for (int i = 0; i < perStrip; i++)
+            {
+                if (i < numbers.Count)
+                    panel.Children.Add(BuildSticker(numbers[i], wMm, hMm));
+                else
+                    panel.Children.Add(new Border { Width = Mm(wMm), Height = Mm(hMm) });
+            }
+            return panel;
+        }
+
+        // ------------------------------------------------------------------ preview
+
+        private void BuildPreview()
+        {
+            spPreview.Children.Clear();
+            if (_numbers.Count == 0) return;
+
+            int per = StickerPerStrip;
+            double wMm = StickerW, hMm = StickerH;
+            int strips = (_numbers.Count + per - 1) / per;
+            int shown = Math.Min(strips, MaxPreviewStrips);
+
+            for (int i = 0; i < shown; i++)
+            {
+                var chunk = _numbers.Skip(i * per).Take(per).ToList();
+
+                spPreview.Children.Add(new TextBlock
+                {
+                    Text = "Lembar " + (i + 1) + "   (" + string.Join(", ", chunk.Select(n => n.ToString("D4", CultureInfo.InvariantCulture))) + ")",
+                    Foreground = Brushes.Gray,
+                    FontSize = 13,
+                    Margin = new Thickness(0, 0, 0, 2)
+                });
+
+                spPreview.Children.Add(new Border
+                {
+                    BorderBrush = Brushes.Gray,
+                    BorderThickness = new Thickness(1),
+                    HorizontalAlignment = HorizontalAlignment.Left,
+                    Margin = new Thickness(0, 0, 0, 12),
+                    Child = new Viewbox { Width = 600, Stretch = Stretch.Uniform, Child = BuildStrip(chunk, wMm, hMm, per) }
+                });
+            }
+
+            if (strips > shown)
+            {
+                spPreview.Children.Add(new TextBlock
+                {
+                    Text = "... dan " + (strips - shown).ToString("N0", CultureInfo.CurrentCulture) + " lembar lainnya.",
+                    Foreground = Brushes.Gray
+                });
+            }
+        }
+
+        // ------------------------------------------------------------------ printing
+
+        /// <summary>
+        /// Asks the printer driver for a page of exactly the strip size. Returns the ticket to print with and the page size the
+        /// driver really gave us; sizeChanged = true when the driver did not accept our size (it kept its own paper size).
+        /// </summary>
+        private static PrintTicket PrepareTicket(PrintQueue queue, Size expected, out Size pageSize, out bool sizeChanged)
+        {
+            pageSize = expected;
+            sizeChanged = false;
+            try
+            {
+                PrintTicket current = queue.UserPrintTicket ?? queue.DefaultPrintTicket;
+                PrintTicket wanted = current.Clone();
+                wanted.PageMediaSize = new PageMediaSize(expected.Width, expected.Height);
+
+                PrintTicket validated = queue.MergeAndValidatePrintTicket(current, wanted).ValidatedPrintTicket;
+
+                PageMediaSize got = validated.PageMediaSize;
+                if (got != null && got.Width.HasValue && got.Height.HasValue)
+                {
+                    pageSize = new Size(got.Width.Value, got.Height.Value);
+                    double tolerance = Mm(1.5);
+                    sizeChanged = Math.Abs(pageSize.Width - expected.Width) > tolerance ||
+                                  Math.Abs(pageSize.Height - expected.Height) > tolerance;
+                }
+                return validated;
+            }
+            catch (Exception)
+            {
+                return null;   // print with the printer's own settings
+            }
+        }
+
+        private FixedDocument BuildDocument(List<int> numbers, double wMm, double hMm, int perStrip, double angle, Size pageSize)
+        {
+            var document = new FixedDocument();
+            document.DocumentPaginator.PageSize = pageSize;
+
+            for (int i = 0; i < numbers.Count; i += perStrip)
+            {
+                FrameworkElement strip = BuildStrip(numbers.Skip(i).Take(perStrip).ToList(), wMm, hMm, perStrip);
+                if (angle != 0) strip.LayoutTransform = new RotateTransform(angle);
+
+                var page = new FixedPage { Width = pageSize.Width, Height = pageSize.Height, Background = Brushes.White };
+                FixedPage.SetLeft(strip, 0);
+                FixedPage.SetTop(strip, 0);
+                page.Children.Add(strip);
+
+                page.Measure(pageSize);
+                page.Arrange(new Rect(new Point(0, 0), pageSize));
+                page.UpdateLayout();
+
+                var content = new PageContent();
+                ((IAddChild)content).AddChild(page);
+                document.Pages.Add(content);
+            }
+            return document;
+        }
+
+        private void btnPrint_Click(object sender, RoutedEventArgs e)
+        {
+            string name = cbPrinter.SelectedItem as string;
+            PrintQueue queue;
+            if (name == null || !_queues.TryGetValue(name, out queue))
+            {
+                MessageBox.Show("Pilih printer dulu.", "Cetak", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            string error;
+            List<int> numbers = ParseSelection(out error);
+            if (error != null || numbers.Count == 0) return;
+
+            int per = StickerPerStrip;
+            double hMm = StickerH, wMm = StickerW;
+            double angle = RotationAngle;
+            int strips = (numbers.Count + per - 1) / per;
+
+            // The page the driver must give us: 10 cm x sticker height (swapped when the strip is turned 90 / 270 degrees).
+            bool turned = angle == 90 || angle == 270;
+            var expected = turned ? new Size(Mm(hMm), Mm(StripMm)) : new Size(Mm(StripMm), Mm(hMm));
+
+            Size pageSize;
+            bool sizeChanged;
+            PrintTicket ticket = PrepareTicket(queue, expected, out pageSize, out sizeChanged);
+
+            if (sizeChanged)
+            {
+                string msg = string.Format(CultureInfo.CurrentCulture,
+                    "Driver printer memakai ukuran kertas {0:0.#} x {1:0.#} mm, bukan {2:0.#} x {3:0.#} mm.\n\n" +
+                    "Atur ukuran kertas di Printer Preferences menjadi {2:0.#} x {3:0.#} mm supaya hasil tidak terpotong.\n\nTetap cetak?",
+                    pageSize.Width * 25.4 / 96, pageSize.Height * 25.4 / 96, expected.Width * 25.4 / 96, expected.Height * 25.4 / 96);
+                if (MessageBox.Show(msg, "Ukuran kertas berbeda", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+                    return;
+            }
+
+            string ask = string.Format(CultureInfo.CurrentCulture, "Cetak {0:N0} stiker ({1:N0} lembar) ke {2}?",
+                                       numbers.Count, strips, name);
+            if (MessageBox.Show(ask, "Cetak", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+                return;
+
+            _lastLayout = cbLayout.SelectedIndex;
+            _lastRotation = cbRotation.SelectedIndex;
+
+            Cursor = Cursors.Wait;
+            try
+            {
+                FixedDocument document = BuildDocument(numbers, wMm, hMm, per, angle, pageSize);
+
+                var dialog = new PrintDialog();
+                dialog.PrintQueue = queue;                       // set the queue first: it resets the ticket
+                if (ticket != null) dialog.PrintTicket = ticket;
+                dialog.PrintDocument(document.DocumentPaginator, "Stiker " + _product.Barcode + " " + _date.ToString("yyMMdd", CultureInfo.InvariantCulture));
+            }
+            catch (Exception ex)
+            {
+                Cursor = Cursors.Arrow;
+                MessageBox.Show("Gagal mencetak:\n\n" + ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+            finally
+            {
+                Cursor = Cursors.Arrow;
+            }
+
+            MessageBox.Show("Terkirim ke printer.", "Cetak", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        private void btnClose_Click(object sender, RoutedEventArgs e)
+        {
+            Close();
+        }
+    }
+}

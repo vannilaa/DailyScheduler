@@ -346,6 +346,31 @@ namespace DailyScheduler
             }
         }
 
+        // The print icon at the end of a row: opens the sticker window for that row.
+        private void btnPrintRow_Click(object sender, RoutedEventArgs e)
+        {
+            var row = (sender as FrameworkElement) == null ? null : ((FrameworkElement)sender).DataContext as ScheduleRow;
+            if (row == null) return;
+
+            // The serials are printed from what is in the database, so the schedule must be saved first.
+            if (_dirty)
+            {
+                MessageBox.Show("Simpan jadwal dulu sebelum mencetak.\n\nTekan Simpan, lalu klik tombol cetak lagi.",
+                                "Belum bisa mencetak", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            if (_loadedDate == null || _loadedLine == null || row.Barcode == null || row.Jumlah <= 0)
+            {
+                MessageBox.Show("Baris ini belum lengkap (part atau Jumlah belum diisi).", "Belum bisa mencetak",
+                                MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            var window = new PrintWindow(row, _loadedDate.Value, _loadedLine) { Owner = this };
+            window.ShowDialog();
+        }
+
         private void btnExit_Click(object sender, RoutedEventArgs e)
         {
             Close();

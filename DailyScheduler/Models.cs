@@ -9,6 +9,7 @@ namespace DailyScheduler
     {
         public int Id { get; set; }
         public string Name { get; set; }
+        public string MapCode { get; set; }       // used in the sticker serial, e.g. "12"
     }
 
     /// <summary>One product from the master list (view v_product_pick).</summary>
@@ -26,6 +27,7 @@ namespace DailyScheduler
         public int TargetPerJam { get; set; }     // 0 = not filled in yet
         public string Printer { get; set; }       // default printer, may be null
         public bool Discontinued { get; set; }
+        public string Position { get; set; }      // F / R / R2 / COVER ... (printed on the sticker), may be null
     }
 
     /// <summary>A saved schedule row, exactly as stored in schedule_item.</summary>

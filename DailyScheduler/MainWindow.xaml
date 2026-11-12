@@ -204,7 +204,7 @@
 
             <DataGrid.Columns>
                 <!-- Drag handle: grab this to reorder the row -->
-                <DataGridTemplateColumn Header="" Width="20" CanUserResize="False">
+                <DataGridTemplateColumn Header="" Width="35" CanUserResize="False">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
                             <Border Background="Transparent" Cursor="SizeAll" ToolTip="Drag to reorder"
@@ -220,7 +220,7 @@
 
                 <!-- Row selector -->
                 <!-- 1-Click Row selector -->
-                <DataGridTemplateColumn Header="" Width="20">
+                <DataGridTemplateColumn Header="" Width="40">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
                             <CheckBox IsChecked="{Binding IsSelected, UpdateSourceTrigger=PropertyChanged}" 
@@ -250,7 +250,7 @@
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
 
-                <DataGridTemplateColumn Header="Part Number" Width="*" MinWidth="180">
+                <DataGridTemplateColumn Header="Part Number" Width="*" MinWidth="160">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
                             <ComboBox Tag="PartNumber"
@@ -269,7 +269,7 @@
                                     Binding="{Binding Part}"
                                     ElementStyle="{StaticResource CellTrimStyle}"/>
 
-                <DataGridTemplateColumn Header="Model" Width="70">
+                <DataGridTemplateColumn Header="Model" Width="100">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
                             <ComboBox Tag="Model"
@@ -350,7 +350,7 @@
                 </DataGridTemplateColumn>
 
                 <!-- Printer: starts as the product's default, the user can pick another one (list = ScheduleRow.PrinterList) -->
-                <DataGridTemplateColumn Header="Printer" Width="60">
+                <DataGridTemplateColumn Header="Printer" Width="100">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
                             <ComboBox ItemsSource="{x:Static local:ScheduleRow.PrinterList}"
@@ -360,6 +360,17 @@
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
 
+
+                <!-- Print stickers for this row (opens the print window) -->
+                <DataGridTemplateColumn Header="Print" Width="50" CanUserResize="False">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <Button Click="btnPrintRow_Click" ToolTip="Cetak stiker" Margin="2" Padding="0">
+                                <TextBlock Text="&#xE749;" FontFamily="Segoe MDL2 Assets" FontSize="20"/>
+                            </Button>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
             </DataGrid.Columns>
         </DataGrid>
 

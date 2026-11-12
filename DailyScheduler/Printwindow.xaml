@@ -1,0 +1,98 @@
+﻿<Window x:Class="DailyScheduler.PrintWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Cetak Stiker" Height="720" Width="1100" MinHeight="600" MinWidth="900"
+        WindowStartupLocation="CenterOwner" FontSize="16">
+
+    <Grid Background="#FFEFC7C7">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="410"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- ===================== OPTIONS ===================== -->
+        <Border Grid.Column="0" Margin="10" Padding="14" Background="White" BorderBrush="LightGray" BorderThickness="1">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <TextBlock x:Name="txtProduct" FontSize="20" FontWeight="Bold" TextWrapping="Wrap"/>
+                        <TextBlock x:Name="txtInfo" Foreground="DimGray" TextWrapping="Wrap" Margin="0,4,0,14"/>
+
+                        <TextBlock Text="Stiker yang dicetak" FontWeight="SemiBold"/>
+
+                        <RadioButton x:Name="rbAll" GroupName="mode" IsChecked="True" Margin="0,8,0,0"
+                                     Content="Semua (1 sampai Jumlah)" Checked="Input_Changed"/>
+
+                        <RadioButton x:Name="rbRange" GroupName="mode" Margin="0,8,0,0"
+                                     Content="Rentang" Checked="Input_Changed"/>
+                        <StackPanel Orientation="Horizontal" Margin="24,4,0,0">
+                            <TextBlock Text="Dari" VerticalAlignment="Center"/>
+                            <TextBox x:Name="tbFrom" Width="80" Margin="6,0,12,0" TextAlignment="Center" MaxLength="9"
+                                     InputMethod.IsInputMethodEnabled="False"
+                                     PreviewTextInput="Digits_PreviewTextInput" TextChanged="Input_Changed"/>
+                            <TextBlock Text="sampai" VerticalAlignment="Center"/>
+                            <TextBox x:Name="tbTo" Width="80" Margin="6,0,0,0" TextAlignment="Center" MaxLength="9"
+                                     InputMethod.IsInputMethodEnabled="False"
+                                     PreviewTextInput="Digits_PreviewTextInput" TextChanged="Input_Changed"/>
+                        </StackPanel>
+
+                        <RadioButton x:Name="rbList" GroupName="mode" Margin="0,8,0,0"
+                                     Content="Satuan (pisahkan dengan koma)" Checked="Input_Changed"/>
+                        <TextBox x:Name="tbList" Margin="24,4,0,0"
+                                 ToolTip="Contoh: 2,3,80,365   atau campuran: 1-10,25,80"
+                                 TextChanged="Input_Changed"/>
+                        <TextBlock Text="Contoh: 2,3,80,365 (boleh juga 1-10,25)" Foreground="Gray" FontSize="13" Margin="24,2,0,0"/>
+
+                        <TextBlock Text="Ukuran stiker" FontWeight="SemiBold" Margin="0,16,0,0"/>
+                        <ComboBox x:Name="cbLayout" Margin="0,4,0,0" SelectionChanged="Input_Changed">
+                            <ComboBoxItem Content="2 × 10 cm   (5 stiker per lembar)"/>
+                            <ComboBoxItem Content="2,5 × 10 cm   (4 stiker per lembar)"/>
+                            <ComboBoxItem Content="1,5 × 10 cm   (8 stiker per lembar)"/>
+                        </ComboBox>
+
+                        <TextBlock Text="Printer" FontWeight="SemiBold" Margin="0,16,0,0"/>
+                        <ComboBox x:Name="cbPrinter" Margin="0,4,0,0" SelectionChanged="Input_Changed"/>
+                        <TextBlock x:Name="txtPrinterNote" Foreground="#FFB36B00" FontSize="13" TextWrapping="Wrap" Margin="0,2,0,0"/>
+
+                        <TextBlock Text="Rotasi cetak" FontWeight="SemiBold" Margin="0,16,0,0"/>
+                        <ComboBox x:Name="cbRotation" Margin="0,4,0,0" SelectionChanged="Input_Changed">
+                            <ComboBoxItem Content="0° (normal)"/>
+                            <ComboBoxItem Content="90°"/>
+                            <ComboBoxItem Content="180°"/>
+                            <ComboBoxItem Content="270°"/>
+                        </ComboBox>
+                        <TextBlock Text="Ubah hanya kalau hasil cetak miring / terbalik. Pratinjau tidak ikut berputar."
+                                   Foreground="Gray" FontSize="13" TextWrapping="Wrap" Margin="0,2,0,0"/>
+
+                        <TextBlock x:Name="txtError" Foreground="Red" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,16,0,0"/>
+                        <TextBlock x:Name="txtSummary" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,8,0,0"/>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+                    <Button x:Name="btnPrint" Content="Cetak" Width="140" Padding="5" Margin="5" FontSize="20" Click="btnPrint_Click"/>
+                    <Button x:Name="btnClose" Content="Tutup" Width="120" Padding="5" Margin="5" FontSize="20" Click="btnClose_Click"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ===================== PREVIEW ===================== -->
+        <Border Grid.Column="1" Margin="0,10,10,10" Padding="14" Background="White" BorderBrush="LightGray" BorderThickness="1">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <TextBlock Text="Pratinjau" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                    <StackPanel x:Name="spPreview"/>
+                </ScrollViewer>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

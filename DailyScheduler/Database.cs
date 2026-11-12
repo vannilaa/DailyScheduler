@@ -52,11 +52,11 @@ namespace DailyScheduler
             using (var con = Open())
             using (var cmd = con.CreateCommand())
             {
-                cmd.CommandText = "SELECT id, name FROM line_production ORDER BY id";
+                cmd.CommandText = "SELECT id, name, map_code FROM line_production ORDER BY id";
                 using (var r = cmd.ExecuteReader())
                 {
                     while (r.Read())
-                        list.Add(new LineProduction { Id = r.GetInt32(0), Name = r.GetString(1) });
+                        list.Add(new LineProduction { Id = r.GetInt32(0), Name = r.GetString(1), MapCode = r.GetString(2) });
                 }
             }
             return list;
@@ -71,7 +71,7 @@ namespace DailyScheduler
                 cmd.CommandText =
                     "SELECT barcode, COALESCE(part_number_code, part_number) || COALESCE(' - ' || model, ''), " +
                     "       customer, model, part, job_no, assembly, qty_per_box, target_per_jam, printer, " +
-                    "       COALESCE(part_number_code, part_number), discontinued " +
+                    "       COALESCE(part_number_code, part_number), discontinued, position " +
                     "FROM product ORDER BY 11, 4";
                 using (var r = cmd.ExecuteReader())
                 {
@@ -90,7 +90,8 @@ namespace DailyScheduler
                             TargetPerJam = r.GetInt32(8),
                             Printer = Str(r, 9),
                             PartNumber = r.GetString(10),
-                            Discontinued = r.GetInt32(11) != 0
+                            Discontinued = r.GetInt32(11) != 0,
+                            Position = Str(r, 12)
                         });
                     }
                 }
