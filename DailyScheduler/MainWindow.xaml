@@ -1,0 +1,391 @@
+﻿<Window x:Class="DailyScheduler.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:DailyScheduler"
+        mc:Ignorable="d"
+        Title="Daily Production Scheduler" Height="768" Width="1366">
+
+    <Window.Resources>
+        <!-- Shared styles -->
+        <Style x:Key="LabelStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="24"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="20,0,20,0"/>
+        </Style>
+
+        <Style x:Key="InputStyle" TargetType="Control">
+            <Setter Property="Height" Value="50"/>
+            <Setter Property="Width" Value="300"/>
+            <Setter Property="FontSize" Value="24"/>
+            <Setter Property="Padding" Value="5,2,2,2"/>
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+
+        <Style x:Key="ActionButtonStyle" TargetType="Button">
+            <Setter Property="Width" Value="170"/>
+            <Setter Property="FontSize" Value="20"/>
+            <Setter Property="Padding" Value="5"/>
+            <Setter Property="Margin" Value="5"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <Style x:Key="FooterTextStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="22"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+            <Setter Property="Padding" Value="5"/>
+            <Setter Property="Margin" Value="5"/>
+        </Style>
+
+        <!-- Long text in cells (customer, Model): cut with "..." instead of wrapping -->
+        <Style x:Key="CellTrimStyle" TargetType="TextBlock">
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="Padding" Value="4,0"/>
+            <Setter Property="ToolTip" Value="{Binding RelativeSource={RelativeSource Self}, Path=Text}"/>
+        </Style>
+
+        <!-- Jml Box: red and bold when Jumlah does not fill a whole number of boxes -->
+        <Style x:Key="JmlBoxStyle" TargetType="TextBlock" BasedOn="{StaticResource CellTrimStyle}">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding JumlahBoxNotWhole}" Value="True">
+                    <Setter Property="Foreground" Value="Red"/>
+                    <Setter Property="FontWeight" Value="Bold"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="HeaderCenterStyle" TargetType="DataGridColumnHeader">
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="FontSize" Value="16"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="4"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid Background="#FFEFC7C7">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <!-- Header: date, line, buttons -->
+            <RowDefinition Height="*"/>
+            <!-- Schedule table -->
+            <RowDefinition Height="Auto"/>
+            <!-- Footer: totals, save, exit -->
+        </Grid.RowDefinitions>
+
+        <!-- ===================== HEADER ===================== -->
+        <Border Grid.Row="0" Background="White" BorderThickness="1" BorderBrush="LightGray">
+            <Grid Margin="0,5">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Tanggal" Style="{StaticResource LabelStyle}"/>
+                <DatePicker x:Name="dpTanggal" Grid.Row="0" Grid.Column="1"
+                            Style="{x:Null}"
+                            Height="50" Width="330" FontSize="24" Padding="5,2,2,2"
+                            HorizontalAlignment="Left" VerticalAlignment="Center"
+                            VerticalContentAlignment="Center"
+                            FirstDayOfWeek="Monday" SelectedDateFormat="Long" Language="id-ID"/>
+
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="Line Production" Style="{StaticResource LabelStyle}"/>
+                <!-- Items come from the line_production table (set ItemsSource in code) -->
+                <ComboBox x:Name="cbLineProduction" Grid.Row="1" Grid.Column="1"
+                      Style="{StaticResource InputStyle}"
+                      Margin="0,5,0,0" Width="330"
+                      DisplayMemberPath="Name" SelectedValuePath="Id"
+                      IsEditable="True" IsTextSearchEnabled="False" StaysOpenOnEdit="True"
+                      TextBoxBase.TextChanged="LineCombo_TextChanged"
+                      PreviewMouseLeftButtonDown="SearchableComboBox_PreviewMouseLeftButtonDown"
+                      GotKeyboardFocus="LineCombo_GotKeyboardFocus"
+                      LostKeyboardFocus="LineCombo_LostKeyboardFocus"
+                      PreviewKeyDown="LineCombo_PreviewKeyDown"/>
+                <TextBlock Grid.Row="1" Grid.Column="1" Text="Pilih line produksi"
+                   Foreground="Gray" FontStyle="Italic" FontSize="24"
+                   Margin="10,5,0,0" HorizontalAlignment="Left" VerticalAlignment="Center"
+                   IsHitTestVisible="False">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Text, ElementName=cbLineProduction}" Value="">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+                <!-- Action buttons (right side) -->
+                <StackPanel Grid.Row="0" Grid.Column="3" Orientation="Horizontal">
+                    <Button x:Name="btnTambahJob" Click="btnTambahJob_Click" Content="Tambah Job" Style="{StaticResource ActionButtonStyle}"/>
+                    <Button x:Name="btnCopy" Content="Copy" Style="{StaticResource ActionButtonStyle}"/>
+                </StackPanel>
+                <StackPanel Grid.Row="1" Grid.Column="3" Orientation="Horizontal">
+                    <Button x:Name="btnHapusJob" Click="btnHapusJob_Click" Content="Hapus Job" Style="{StaticResource ActionButtonStyle}"/>
+                    <Button x:Name="btnEditJadwal" Content="Edit Jadwal" Style="{StaticResource ActionButtonStyle}"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ===================== SCHEDULE TABLE ===================== -->
+        <DataGrid x:Name="dgSchedule" Grid.Row="1"
+                  Margin="10"
+                  AutoGenerateColumns="False"
+                  CanUserAddRows="False"
+                  CanUserDeleteRows="False"
+                  CanUserResizeRows="False"
+                  CanUserSortColumns="False"
+                  SelectionMode="Single"
+                  HeadersVisibility="Column"
+                  GridLinesVisibility="All"
+                  RowHeight="40"
+                  FontSize="16"
+                  Background="White"
+                  ColumnHeaderStyle="{StaticResource HeaderCenterStyle}" >
+
+            <!-- No blue selection highlight and no black focus box. Done with styles (not by overriding the
+                 system highlight colour, which would also hide the highlight inside the dropdown lists). -->
+            <DataGrid.Resources>
+                <Style TargetType="ComboBox">
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=ItemsSource.Count}" Value="0">
+                            <Setter Property="IsEnabled" Value="False"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </DataGrid.Resources>
+            <DataGrid.RowStyle>
+                <Style TargetType="DataGridRow">
+                    <Setter Property="AllowDrop" Value="True"/>
+                    <EventSetter Event="DragOver" Handler="Row_DragOver"/>
+                    <EventSetter Event="Drop" Handler="Row_Drop"/>
+                    <Style.Triggers>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter Property="Background" Value="White"/>
+                            <Setter Property="Foreground" Value="Black"/>
+                        </Trigger>
+                        <DataTrigger Binding="{Binding IsPartial}" Value="True">
+                            <Setter Property="Background" Value="#FFFFEFC9"/>
+                            <Setter Property="ToolTip" Value="{Binding CandidateHint}"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </DataGrid.RowStyle>
+
+            <DataGrid.CellStyle>
+                <Style TargetType="DataGridCell">
+                    <Setter Property="BorderThickness" Value="0"/>
+                    <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+                    <Style.Triggers>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter Property="Background" Value="White"/>
+                            <Setter Property="Foreground" Value="Black"/>
+                            <Setter Property="BorderBrush" Value="Transparent"/>
+                        </Trigger>
+                    </Style.Triggers>
+                </Style>
+            </DataGrid.CellStyle>
+
+            <DataGrid.Columns>
+                <!-- Drag handle: grab this to reorder the row -->
+                <DataGridTemplateColumn Header="" Width="20" CanUserResize="False">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <Border Background="Transparent" Cursor="SizeAll" ToolTip="Drag to reorder"
+                                    PreviewMouseLeftButtonDown="Handle_PreviewMouseLeftButtonDown"
+                                    PreviewMouseMove="Handle_PreviewMouseMove"
+                                    PreviewMouseLeftButtonUp="Handle_PreviewMouseLeftButtonUp">
+                                <TextBlock Text="⋮⋮" FontSize="18" FontWeight="Bold" Foreground="Gray"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
+                <!-- Row selector -->
+                <!-- 1-Click Row selector -->
+                <DataGridTemplateColumn Header="" Width="20">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <CheckBox IsChecked="{Binding IsSelected, UpdateSourceTrigger=PropertyChanged}" 
+                      HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
+                <DataGridTextColumn Header="Urutan" Width="55" IsReadOnly="True"
+                                    Binding="{Binding Urutan}"
+                                    ElementStyle="{StaticResource CellTrimStyle}"/>
+
+                <!-- Filter dropdowns: pick any of Customer / Part Number / Model / Job No.
+                     Each pick narrows the other three. Delete the text of a cell to undo that pick. -->
+                <DataGridTemplateColumn Header="Customer" Width="130">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <ComboBox Tag="Customer"
+                                      ItemsSource="{Binding CustomerOptions}"
+                                      SelectedItem="{Binding Customer, UpdateSourceTrigger=PropertyChanged}"
+                                      Margin="2" VerticalContentAlignment="Center"
+                                      IsEditable="True" IsTextSearchEnabled="False" StaysOpenOnEdit="True"
+                                      TextBoxBase.TextChanged="SearchableComboBox_TextChanged"
+                                      PreviewMouseLeftButtonDown="SearchableComboBox_PreviewMouseLeftButtonDown"
+                                      LostKeyboardFocus="SearchableComboBox_LostKeyboardFocus"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
+                <DataGridTemplateColumn Header="Part Number" Width="*" MinWidth="180">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <ComboBox Tag="PartNumber"
+                                      ItemsSource="{Binding PartNumberOptions}"
+                                      SelectedItem="{Binding PartNumber, UpdateSourceTrigger=PropertyChanged}"
+                                      Margin="2" VerticalContentAlignment="Center"
+                                      IsEditable="True" IsTextSearchEnabled="False" StaysOpenOnEdit="True"
+                                      TextBoxBase.TextChanged="SearchableComboBox_TextChanged"
+                                      PreviewMouseLeftButtonDown="SearchableComboBox_PreviewMouseLeftButtonDown"
+                                      LostKeyboardFocus="SearchableComboBox_LostKeyboardFocus"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
+                <DataGridTextColumn Header="Part" Width="70" IsReadOnly="True"
+                                    Binding="{Binding Part}"
+                                    ElementStyle="{StaticResource CellTrimStyle}"/>
+
+                <DataGridTemplateColumn Header="Model" Width="70">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <ComboBox Tag="Model"
+                                      ItemsSource="{Binding ModelOptions}"
+                                      SelectedItem="{Binding Model, UpdateSourceTrigger=PropertyChanged}"
+                                      Margin="2" VerticalContentAlignment="Center"
+                                      IsEditable="True" IsTextSearchEnabled="False" StaysOpenOnEdit="True"
+                                      TextBoxBase.TextChanged="SearchableComboBox_TextChanged"
+                                      PreviewMouseLeftButtonDown="SearchableComboBox_PreviewMouseLeftButtonDown"
+                                      LostKeyboardFocus="SearchableComboBox_LostKeyboardFocus"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
+                <DataGridTemplateColumn Header="Job No" Width="100">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <ComboBox Tag="JobNo"
+                                      ItemsSource="{Binding JobNoOptions}"
+                                      SelectedItem="{Binding JobNo, UpdateSourceTrigger=PropertyChanged}"
+                                      Margin="2" VerticalContentAlignment="Center"
+                                      IsEditable="True" IsTextSearchEnabled="False" StaysOpenOnEdit="True"
+                                      TextBoxBase.TextChanged="SearchableComboBox_TextChanged"
+                                      PreviewMouseLeftButtonDown="SearchableComboBox_PreviewMouseLeftButtonDown"
+                                      LostKeyboardFocus="SearchableComboBox_LostKeyboardFocus"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
+                <!-- Assembly from the master list (read-only; not the Line Production above) -->
+                <DataGridTextColumn Header="Assembly" Width="120" IsReadOnly="True"
+                                    Binding="{Binding Assembly}"
+                                    ElementStyle="{StaticResource CellTrimStyle}"/>
+
+                <DataGridTextColumn Header="Nomor&#x0a;Barcode" Width="75" IsReadOnly="True"
+                                    Binding="{Binding NomorBarcode}"
+                                    ElementStyle="{StaticResource CellTrimStyle}"/>
+
+                <DataGridTemplateColumn Header="Jumlah" Width="80">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <!-- Light yellow background makes it obviously editable; digits only -->
+                            <TextBox Text="{Binding JumlahText, UpdateSourceTrigger=PropertyChanged}"
+                                     Background="#FFFFE0" BorderBrush="#FFCCCCCC" BorderThickness="1"
+                                     TextAlignment="Center" VerticalContentAlignment="Center"
+                                     MaxLength="9" InputMethod.IsInputMethodEnabled="False"
+                                     PreviewTextInput="NumberOnly_PreviewTextInput"
+                                     PreviewKeyDown="NumberOnly_PreviewKeyDown"
+                                     DataObject.Pasting="NumberOnly_Pasting"
+                                     Margin="2"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
+                <DataGridTextColumn Header="Qty&#x0a;/Box" Width="55" IsReadOnly="True"
+                                    Binding="{Binding QtyPerBox}"
+                                    ElementStyle="{StaticResource CellTrimStyle}"/>
+
+                <DataGridTextColumn Header="Jml&#x0a;Box" Width="55" IsReadOnly="True"
+                                    Binding="{Binding JumlahBox}"
+                                    ElementStyle="{StaticResource JmlBoxStyle}"/>
+
+                <DataGridTextColumn Header="Target&#x0a;/Jam" Width="65" IsReadOnly="True"
+                                    Binding="{Binding TargetPerJam}"
+                                    ElementStyle="{StaticResource CellTrimStyle}"/>
+
+                <DataGridTextColumn Header="Jml&#x0a;Jam" Width="60" IsReadOnly="True"
+                                    Binding="{Binding JumlahJamText}"
+                                    ElementStyle="{StaticResource CellTrimStyle}"/>
+
+                <DataGridTemplateColumn Header="Cetak&#x0a;Box" Width="55">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <CheckBox IsChecked="{Binding CetakBox, UpdateSourceTrigger=PropertyChanged}" 
+                      HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
+                <!-- Printer: starts as the product's default, the user can pick another one (list = ScheduleRow.PrinterList) -->
+                <DataGridTemplateColumn Header="Printer" Width="60">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <ComboBox ItemsSource="{x:Static local:ScheduleRow.PrinterList}"
+                                      SelectedItem="{Binding Printer, UpdateSourceTrigger=PropertyChanged}"
+                                      Margin="2" VerticalContentAlignment="Center"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <!-- ===================== FOOTER ===================== -->
+        <Border Grid.Row="2" Background="White" BorderThickness="1" BorderBrush="LightGray">
+            <Grid Margin="10,8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="150"/>
+                    <ColumnDefinition Width="120"/>
+                    <ColumnDefinition Width="120"/>
+                    <ColumnDefinition Width="120"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBlock Grid.Column="0" Text="Total" Style="{StaticResource FooterTextStyle}"/>
+                <TextBlock x:Name="txtTotalJumlah" Grid.Column="1" Style="{StaticResource FooterTextStyle}"/>
+                <TextBlock x:Name="txtTotalBox" Grid.Column="2" Style="{StaticResource FooterTextStyle}"/>
+                <TextBlock x:Name="txtTotalJam" Grid.Column="3" Style="{StaticResource FooterTextStyle}"/>
+
+                <Button x:Name="btnSimpan" Click="btnSimpan_Click" Grid.Column="5" Content="Simpan"
+                        Style="{StaticResource ActionButtonStyle}" Width="140"/>
+                <Button x:Name="btnExit" Click="btnExit_Click" Grid.Column="6" Content="Exit"
+                        Style="{StaticResource ActionButtonStyle}" Width="140"/>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
