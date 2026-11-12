@@ -108,14 +108,15 @@
                         </Grid>
                         <TextBlock Text="Putar scroll mouse di atas kotak (atau tombol panah): 0,5 mm per klik, tahan Shift untuk 0,1 mm. Tersimpan per printer dan per ukuran stiker. Pakai Cetak Tes untuk mencari angkanya."
                                    Foreground="Gray" FontSize="13" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                        
+                        <Button x:Name="btnTest" Content="Cetak Tes" Width="100" Padding="5" Margin="0,20,0,0" FontSize="20" Click="btnTest_Click"/>
 
-                        <TextBlock x:Name="txtError" Foreground="Red" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,16,0,0"/>
-                        <TextBlock x:Name="txtSummary" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,8,0,0"/>
+                        <TextBlock x:Name="txtError" Foreground="Red" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,5,0,0"/>
+                        <TextBlock x:Name="txtSummary" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,5,0,0"/>
                     </StackPanel>
                 </ScrollViewer>
 
                 <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,12,0,0">
-                    <Button x:Name="btnTest" Content="Cetak Tes" Width="100" Padding="5" Margin="5" FontSize="20" Click="btnTest_Click"/>
                     <Button x:Name="btnPrint" Content="Cetak" Width="100" Padding="5" Margin="5" FontSize="20" Click="btnPrint_Click"/>
                     <Button x:Name="btnClose" Content="Tutup" Width="100" Padding="5" Margin="5" FontSize="20" Click="btnClose_Click"/>
                 </StackPanel>

@@ -387,9 +387,9 @@ namespace DailyScheduler
         }
 
         /// <summary>Text that is shrunk (never enlarged) to fit its cell. angle: 0, -90 (reads bottom to top) or 90.</summary>
-        private static FrameworkElement FitText(string text, double fontSize, bool bold, double angle, double margin)
+        private static FrameworkElement FitText(string text, double fontSize, bool bold, double angle, double margin, bool heavy = false)
         {
-            var tb = new TextBlock
+            Func<TextBlock> makeText = () => new TextBlock
             {
                 Text = text ?? "",
                 FontFamily = new FontFamily("Arial Narrow, Arial"),
@@ -399,18 +399,31 @@ namespace DailyScheduler
                 TextWrapping = TextWrapping.NoWrap,
                 TextAlignment = TextAlignment.Center
             };
-            if (angle != 0) tb.LayoutTransform = new RotateTransform(angle);
+
+            FrameworkElement content;
+            if (heavy)
+            {
+                double d = fontSize * 0.035;
+                var stack = new Grid();
+                stack.Children.Add(makeText());
+                var right = makeText(); right.RenderTransform = new TranslateTransform(d, 0); stack.Children.Add(right);
+                var down = makeText(); down.RenderTransform = new TranslateTransform(0, d); stack.Children.Add(down);
+                content = stack;
+            }
+            else
+            {
+                content = makeText();
+            }
+            if (angle != 0) content.LayoutTransform = new RotateTransform(angle);
 
             return new Viewbox
             {
                 Stretch = Stretch.Uniform,
                 StretchDirection = StretchDirection.DownOnly,
                 Margin = new Thickness(margin),
-                Child = tb
+                Child = content
             };
-        }
-
-        /// <summary>QR code drawn as a black shape (no picture, so it stays sharp at any printer resolution).</summary>
+        }        /// <summary>QR code drawn as a black shape (no picture, so it stays sharp at any printer resolution).</summary>
         private static FrameworkElement MakeQr(string text, double margin)
         {
             var generator = new QRCodeGenerator();
@@ -546,15 +559,15 @@ namespace DailyScheduler
             grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(bar) });
 
             // top: Position + Part
-            Place(grid, FitText(Join(" \u00B7 ", _product.Position, _product.Part), font, true, 0, pad), 0, 0, 3);
+            Place(grid, FitText(Join(" \u00B7 ", _product.Position, _product.Part), font, true, 0, pad, true), 0, 0, 3);
             // left: Job No + Model (reads bottom to top)
-            Place(grid, FitText(Join(" / ", _product.JobNo, _product.Model), font, false, -90, pad), 1, 0, 1);
+            Place(grid, FitText(Join(" / ", _product.JobNo, _product.Model), font, false, -90, pad, true), 1, 0, 1);
             // middle: QR code of the full serial
             Place(grid, MakeQr(serial, Mm(0.3)), 1, 1, 1);
             // right: Part Number (reads top to bottom)
-            Place(grid, FitText(_product.PartNumber, font, true, -90, pad), 1, 2, 1);
+            Place(grid, FitText(_product.PartNumber, font, true, -90, pad, true), 1, 2, 1);
             // bottom: serial
-            Place(grid, FitText(serial, font, true, 0, pad), 2, 0, 3);
+            Place(grid, FitText(serial, font, true, 0, pad, true), 2, 0, 3);
 
             return grid;
         }
