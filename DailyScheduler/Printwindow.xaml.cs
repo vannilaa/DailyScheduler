@@ -26,9 +26,88 @@ namespace DailyScheduler
         private const int MaxPreviewStrips = 8;    // the preview only shows the first strips
         private const double StripMm = 100;        // strip width (all layouts)
 
-        // Remembered while the program runs, so the user does not have to pick it again for every row.
+        // Remembered between runs (a small file in the user's AppData folder), so nothing has to be set again for every row.
         private static int _lastLayout = 0;
         private static int _lastRotation = 0;
+
+        // Fine position per printer AND strip size: { x, y } in mm, + = right / down. Each printer feeds its labels a bit differently.
+        private static readonly Dictionary<string, double[]> _offsets =
+            new Dictionary<string, double[]>(StringComparer.OrdinalIgnoreCase);
+
+        private static double[] GetOffsets(string printer, int layout)
+        {
+            double[] o;
+            if (_offsets.TryGetValue(printer + "|" + layout, out o)) return o;
+            return new[] { layout == 2 ? 1.0 : 1.5, 0.0 };   // first guess: these printers print a little too far left
+        }
+        private static bool _settingsLoaded;
+
+        private static string SettingsPath
+        {
+            get
+            {
+                string dir = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DailyScheduler");
+                return System.IO.Path.Combine(dir, "print.ini");
+            }
+        }
+
+        private static void LoadSettings()
+        {
+            if (_settingsLoaded) return;
+            _settingsLoaded = true;
+            try
+            {
+                if (!System.IO.File.Exists(SettingsPath)) return;
+                foreach (string line in System.IO.File.ReadAllLines(SettingsPath))
+                {
+                    int eq = line.IndexOf('=');
+                    if (eq <= 0) continue;
+                    string key = line.Substring(0, eq).Trim().ToLowerInvariant();
+                    string value = line.Substring(eq + 1).Trim();
+                    double d; int i;
+                    if (key == "layout" && int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out i)) _lastLayout = i;
+                    else if (key == "rotation" && int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out i)) _lastRotation = i;
+                    else if (key == "offset")   // offset=printer|layout|x|y
+                    {
+                        string[] part = value.Split('|');
+                        int layout; double ox, oy;
+                        if (part.Length == 4 &&
+                            int.TryParse(part[1], NumberStyles.None, CultureInfo.InvariantCulture, out layout) &&
+                            double.TryParse(part[2], NumberStyles.Float, CultureInfo.InvariantCulture, out ox) &&
+                            double.TryParse(part[3], NumberStyles.Float, CultureInfo.InvariantCulture, out oy))
+                            _offsets[part[0] + "|" + layout] = new[] { ox, oy };
+                    }
+                }
+            }
+            catch (Exception) { }   // settings are a convenience; ignore a broken file
+        }
+
+        private static void SaveSettings()
+        {
+            try
+            {
+                System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(SettingsPath));
+                var lines = new List<string>
+                {
+                    "layout=" + _lastLayout.ToString(CultureInfo.InvariantCulture),
+                    "rotation=" + _lastRotation.ToString(CultureInfo.InvariantCulture)
+                };
+                foreach (var kv in _offsets)
+                    lines.Add("offset=" + kv.Key + "|" + kv.Value[0].ToString(CultureInfo.InvariantCulture) + "|" +
+                              kv.Value[1].ToString(CultureInfo.InvariantCulture));
+                System.IO.File.WriteAllLines(SettingsPath, lines);
+            }
+            catch (Exception) { }
+        }
+
+        /// <summary>Reads a number of millimetres from a box ("1.5" or "1,5" or "-2"); empty or wrong = 0. Limited to +-20 mm.</summary>
+        private static double ReadMm(TextBox box)
+        {
+            double d;
+            string s = (box.Text ?? "").Trim().Replace(',', '.');
+            if (!double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out d)) return 0;
+            return Math.Max(-20, Math.Min(20, d));
+        }
 
         private readonly ProductInfo _product;
         private readonly DateTime _date;
@@ -57,6 +136,7 @@ namespace DailyScheduler
             tbTo.GotKeyboardFocus += delegate { rbRange.IsChecked = true; };
             tbList.GotKeyboardFocus += delegate { rbList.IsChecked = true; };
 
+            LoadSettings();
             cbLayout.SelectedIndex = _lastLayout;
             cbRotation.SelectedIndex = _lastRotation;
 
@@ -69,6 +149,7 @@ namespace DailyScheduler
             LoadPrinters();
 
             _ready = true;
+            ShowOffsets();
             UpdateAll();
         }
 
@@ -110,6 +191,42 @@ namespace DailyScheduler
 
         private void Input_Changed(object sender, RoutedEventArgs e)
         {
+            UpdateAll();
+        }
+
+        // ---- fine position (per printer + strip size) ----
+
+        private bool _loadingOffsets;
+
+        private string OffsetKey()
+        {
+            return (cbPrinter.SelectedItem as string ?? "") + "|" + LayoutIndex;
+        }
+
+        /// <summary>Shows the saved offsets of the chosen printer + strip size in the two boxes.</summary>
+        private void ShowOffsets()
+        {
+            double[] o = GetOffsets(cbPrinter.SelectedItem as string ?? "", LayoutIndex);
+            _loadingOffsets = true;
+            try
+            {
+                tbOffsetX.Text = o[0].ToString("0.##", CultureInfo.InvariantCulture);
+                tbOffsetY.Text = o[1].ToString("0.##", CultureInfo.InvariantCulture);
+            }
+            finally { _loadingOffsets = false; }
+        }
+
+        private void Offset_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (!_ready || _loadingOffsets) return;
+            _offsets[OffsetKey()] = new[] { ReadMm(tbOffsetX), ReadMm(tbOffsetY) };
+        }
+
+        // Printer or strip size changed: load the offsets that belong to that combination.
+        private void Setup_Changed(object sender, SelectionChangedEventArgs e)
+        {
+            if (!_ready) return;
+            ShowOffsets();
             UpdateAll();
         }
 
@@ -334,8 +451,8 @@ namespace DailyScheduler
         // ---- The 1.5 cm stock (8 per strip) -------------------------------------------------------------------------
         // The backing paper (liner) is 12.5 x 15 mm per sticker, but the sticker itself is smaller. These two numbers are the
         // REAL sticker size. They are a first guess: measure one sticker with a ruler and change them here.
-        private const double CompactStickerWMm = 10.0;
-        private const double CompactStickerHMm = 12.0;
+        private const double CompactStickerWMm = 12.0;
+        private const double CompactStickerHMm = 11.5;
 
         /// <summary>1.5 cm stock. Left (vertical): map code + date + sticker number. Bottom: part number. The rest: QR code of the full serial.</summary>
         private FrameworkElement BuildCompactSticker(int number, double cellWMm, double cellHMm)
@@ -386,8 +503,8 @@ namespace DailyScheduler
             if (wMm < 15) return BuildCompactSticker(number, wMm, hMm);   // the 8-per-strip stock
 
             double w = Mm(wMm), h = Mm(hMm);
-            double side = w * 0.175;      // left / right text columns
-            double bar = Math.Min(w, h) * 0.16;   // top / bottom text rows
+            double side = w * 0.13;       // left / right text columns (thin, so the QR code gets the room)
+            double bar = Math.Min(w, h) * 0.12;   // top / bottom text rows
             double pad = Mm(0.3);
             double font = bar * 0.85;     // the text is shrunk from here when it does not fit
             string serial = Serial(number);
@@ -405,7 +522,7 @@ namespace DailyScheduler
             // left: Job No + Model (reads bottom to top)
             Place(grid, FitText(Join(" / ", _product.JobNo, _product.Model), font, false, -90, pad), 1, 0, 1);
             // middle: QR code of the full serial
-            Place(grid, MakeQr(serial, Mm(0.6)), 1, 1, 1);
+            Place(grid, MakeQr(serial, Mm(0.3)), 1, 1, 1);
             // right: Part Number (reads top to bottom)
             Place(grid, FitText(_product.PartNumber, font, true, 90, pad), 1, 2, 1);
             // bottom: serial
@@ -506,7 +623,7 @@ namespace DailyScheduler
             }
         }
 
-        private FixedDocument BuildDocument(List<int> numbers, double wMm, double hMm, int perStrip, double angle, Size pageSize)
+        private FixedDocument BuildDocument(List<int> numbers, double wMm, double hMm, int perStrip, double angle, Size pageSize, double offsetXMm, double offsetYMm)
         {
             var document = new FixedDocument();
             document.DocumentPaginator.PageSize = pageSize;
@@ -517,8 +634,8 @@ namespace DailyScheduler
                 if (angle != 0) strip.LayoutTransform = new RotateTransform(angle);
 
                 var page = new FixedPage { Width = pageSize.Width, Height = pageSize.Height, Background = Brushes.White };
-                FixedPage.SetLeft(strip, 0);
-                FixedPage.SetTop(strip, 0);
+                FixedPage.SetLeft(strip, Mm(offsetXMm));   // fine position: moves the whole strip on the page
+                FixedPage.SetTop(strip, Mm(offsetYMm));
                 page.Children.Add(strip);
 
                 page.Measure(pageSize);
@@ -532,7 +649,50 @@ namespace DailyScheduler
             return document;
         }
 
-        private void btnPrint_Click(object sender, RoutedEventArgs e)
+        /// <summary>A single test strip: a frame around every slot, an arrow that points up, and the slot number.</summary>
+        private FixedDocument BuildTestDocument(double wMm, double hMm, int perStrip, double angle, Size pageSize, double offsetXMm, double offsetYMm)
+        {
+            var strip = new StackPanel { Orientation = Orientation.Horizontal, Background = Brushes.White };
+            for (int i = 0; i < perStrip; i++)
+            {
+                var cell = new Grid { Width = Mm(wMm), Height = Mm(hMm) };
+                cell.Children.Add(new Border { BorderBrush = Brushes.Black, BorderThickness = new Thickness(Mm(0.3)) });
+                cell.Children.Add(new TextBlock
+                {
+                    Text = "\u25B2\n" + (i + 1),
+                    TextAlignment = TextAlignment.Center,
+                    FontWeight = FontWeights.Bold,
+                    FontSize = Math.Min(Mm(wMm), Mm(hMm)) * 0.3,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center
+                });
+                strip.Children.Add(cell);
+            }
+            if (angle != 0) strip.LayoutTransform = new RotateTransform(angle);
+
+            var document = new FixedDocument();
+            document.DocumentPaginator.PageSize = pageSize;
+
+            var page = new FixedPage { Width = pageSize.Width, Height = pageSize.Height, Background = Brushes.White };
+            FixedPage.SetLeft(strip, Mm(offsetXMm));
+            FixedPage.SetTop(strip, Mm(offsetYMm));
+            page.Children.Add(strip);
+            page.Measure(pageSize);
+            page.Arrange(new Rect(new Point(0, 0), pageSize));
+            page.UpdateLayout();
+
+            var content = new PageContent();
+            ((IAddChild)content).AddChild(page);
+            document.Pages.Add(content);
+            return document;
+        }
+
+        private void btnPrint_Click(object sender, RoutedEventArgs e) { Print(false); }
+
+        // One strip with only frames and numbers (no data): shows where the printer really puts the print, for setting the offsets.
+        private void btnTest_Click(object sender, RoutedEventArgs e) { Print(true); }
+
+        private void Print(bool test)
         {
             string name = cbPrinter.SelectedItem as string;
             PrintQueue queue;
@@ -542,9 +702,15 @@ namespace DailyScheduler
                 return;
             }
 
-            string error;
-            List<int> numbers = ParseSelection(out error);
-            if (error != null || numbers.Count == 0) return;
+            List<int> numbers;
+            if (test)
+                numbers = Enumerable.Range(1, StickerPerStrip).ToList();   // one strip
+            else
+            {
+                string error;
+                numbers = ParseSelection(out error);
+                if (error != null || numbers.Count == 0) return;
+            }
 
             int per = StickerPerStrip;
             double hMm = StickerH, wMm = StickerW;
@@ -569,18 +735,23 @@ namespace DailyScheduler
                     return;
             }
 
-            string ask = string.Format(CultureInfo.CurrentCulture, "Cetak {0:N0} stiker ({1:N0} lembar) ke {2}?",
-                                       numbers.Count, strips, name);
+            string ask = test
+                ? "Cetak 1 lembar TES (hanya kotak dan nomor) ke " + name + "?"
+                : string.Format(CultureInfo.CurrentCulture, "Cetak {0:N0} stiker ({1:N0} lembar) ke {2}?", numbers.Count, strips, name);
             if (MessageBox.Show(ask, "Cetak", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
                 return;
 
             _lastLayout = cbLayout.SelectedIndex;
             _lastRotation = cbRotation.SelectedIndex;
+            _offsets[OffsetKey()] = new[] { ReadMm(tbOffsetX), ReadMm(tbOffsetY) };
+            SaveSettings();
 
             Cursor = Cursors.Wait;
             try
             {
-                FixedDocument document = BuildDocument(numbers, wMm, hMm, per, angle, pageSize);
+                FixedDocument document = test
+                    ? BuildTestDocument(wMm, hMm, per, angle, pageSize, ReadMm(tbOffsetX), ReadMm(tbOffsetY))
+                    : BuildDocument(numbers, wMm, hMm, per, angle, pageSize, ReadMm(tbOffsetX), ReadMm(tbOffsetY));
 
                 var dialog = new PrintDialog();
                 dialog.PrintQueue = queue;                       // set the queue first: it resets the ticket
