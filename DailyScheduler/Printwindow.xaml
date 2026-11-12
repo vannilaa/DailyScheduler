@@ -70,13 +70,43 @@
                                    Foreground="Gray" FontSize="13" TextWrapping="Wrap" Margin="0,2,0,0"/>
 
                         <TextBlock Text="Geser posisi cetak (mm)" FontWeight="SemiBold" Margin="0,16,0,0"/>
-                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-                            <TextBlock Text="Kanan" VerticalAlignment="Center"/>
-                            <TextBox x:Name="tbOffsetX" Width="70" Margin="6,0,16,0" TextAlignment="Center" TextChanged="Offset_TextChanged"/>
-                            <TextBlock Text="Bawah" VerticalAlignment="Center"/>
-                            <TextBox x:Name="tbOffsetY" Width="70" Margin="6,0,0,0" TextAlignment="Center" TextChanged="Offset_TextChanged"/>
-                        </StackPanel>
-                        <TextBlock Text="Isi minus (-) untuk geser ke kiri / atas. Tersimpan per printer dan per ukuran stiker. Pakai tombol Cetak Tes untuk mencari angkanya."
+                        <Grid Margin="0,6,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="110"/>
+                                <ColumnDefinition Width="80"/>
+                                <ColumnDefinition Width="26"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Horizontal" VerticalAlignment="Center"/>
+                            <TextBox x:Name="tbOffsetX" Grid.Row="0" Grid.Column="1" Height="30" Tag="X"
+                                     TextAlignment="Center" VerticalContentAlignment="Center"
+                                     TextChanged="Offset_TextChanged" PreviewMouseWheel="Offset_MouseWheel"
+                                     PreviewKeyDown="Offset_PreviewKeyDown"/>
+                            <UniformGrid Grid.Row="0" Grid.Column="2" Rows="2" Height="30" Tag="X" PreviewMouseWheel="Offset_MouseWheel">
+                                <RepeatButton Tag="X:1" Content="&#x25B2;" FontSize="9" Padding="0" Click="OffsetButton_Click"/>
+                                <RepeatButton Tag="X:-1" Content="&#x25BC;" FontSize="9" Padding="0" Click="OffsetButton_Click"/>
+                            </UniformGrid>
+                            <TextBlock Grid.Row="0" Grid.Column="3" Text="+ kanan / &#x2212; kiri" Foreground="Gray" FontSize="13"
+                                       Margin="8,0,0,0" VerticalAlignment="Center"/>
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Vertikal" VerticalAlignment="Center" Margin="0,6,0,0"/>
+                            <TextBox x:Name="tbOffsetY" Grid.Row="1" Grid.Column="1" Height="30" Tag="Y" Margin="0,6,0,0"
+                                     TextAlignment="Center" VerticalContentAlignment="Center"
+                                     TextChanged="Offset_TextChanged" PreviewMouseWheel="Offset_MouseWheel"
+                                     PreviewKeyDown="Offset_PreviewKeyDown"/>
+                            <UniformGrid Grid.Row="1" Grid.Column="2" Rows="2" Height="30" Tag="Y" Margin="0,6,0,0" PreviewMouseWheel="Offset_MouseWheel">
+                                <RepeatButton Tag="Y:1" Content="&#x25B2;" FontSize="9" Padding="0" Click="OffsetButton_Click"/>
+                                <RepeatButton Tag="Y:-1" Content="&#x25BC;" FontSize="9" Padding="0" Click="OffsetButton_Click"/>
+                            </UniformGrid>
+                            <TextBlock Grid.Row="1" Grid.Column="3" Text="+ bawah / &#x2212; atas" Foreground="Gray" FontSize="13"
+                                       Margin="8,6,0,0" VerticalAlignment="Center"/>
+                        </Grid>
+                        <TextBlock Text="Putar scroll mouse di atas kotak (atau tombol panah): 0,5 mm per klik, tahan Shift untuk 0,1 mm. Tersimpan per printer dan per ukuran stiker. Pakai Cetak Tes untuk mencari angkanya."
                                    Foreground="Gray" FontSize="13" TextWrapping="Wrap" Margin="0,2,0,0"/>
 
                         <TextBlock x:Name="txtError" Foreground="Red" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,16,0,0"/>
@@ -84,9 +114,9 @@
                     </StackPanel>
                 </ScrollViewer>
 
-                <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,0" VerticalAlignment="Center">
-                    <Button x:Name="btnTest" Content="Cetak Tes" Width="100" Padding="5" Margin="5" FontSize="20" Click="btnTest_Click"/>
-                    <Button x:Name="btnPrint" Content="Cetak" Width="100" Padding="5" Margin="5" FontSize="20" Click="btnPrint_Click"/>
+                <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+                    <Button x:Name="btnTest" Content="Cetak Tes" Width="130" Padding="5" Margin="5" FontSize="20" Click="btnTest_Click"/>
+                    <Button x:Name="btnPrint" Content="Cetak" Width="120" Padding="5" Margin="5" FontSize="20" Click="btnPrint_Click"/>
                     <Button x:Name="btnClose" Content="Tutup" Width="100" Padding="5" Margin="5" FontSize="20" Click="btnClose_Click"/>
                 </StackPanel>
             </Grid>

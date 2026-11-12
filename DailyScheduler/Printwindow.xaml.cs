@@ -216,6 +216,34 @@ namespace DailyScheduler
             finally { _loadingOffsets = false; }
         }
 
+        // Mouse wheel / arrow keys / the little arrow buttons change the value in steps: 0.5 mm, or 0.1 mm while Shift is held.
+        private void Nudge(string axis, int direction)
+        {
+            TextBox box = axis == "Y" ? tbOffsetY : tbOffsetX;
+            double step = (Keyboard.Modifiers & ModifierKeys.Shift) != 0 ? 0.1 : 0.5;
+            double value = Math.Round(ReadMm(box) + direction * step, 2);
+            box.Text = Math.Max(-20, Math.Min(20, value)).ToString("0.##", CultureInfo.InvariantCulture);
+        }
+
+        private void Offset_MouseWheel(object sender, MouseWheelEventArgs e)
+        {
+            Nudge(((FrameworkElement)sender).Tag as string, e.Delta > 0 ? 1 : -1);
+            e.Handled = true;   // do not scroll the options panel at the same time
+        }
+
+        private void Offset_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key != Key.Up && e.Key != Key.Down) return;
+            Nudge(((FrameworkElement)sender).Tag as string, e.Key == Key.Up ? 1 : -1);
+            e.Handled = true;
+        }
+
+        private void OffsetButton_Click(object sender, RoutedEventArgs e)
+        {
+            string[] tag = (((FrameworkElement)sender).Tag as string ?? "X:1").Split(':');   // "X:1" or "Y:-1"
+            Nudge(tag[0], tag.Length > 1 && tag[1] == "-1" ? -1 : 1);
+        }
+
         private void Offset_TextChanged(object sender, TextChangedEventArgs e)
         {
             if (!_ready || _loadingOffsets) return;
@@ -458,16 +486,16 @@ namespace DailyScheduler
         private FrameworkElement BuildCompactSticker(int number, double cellWMm, double cellHMm)
         {
             double sw = Mm(CompactStickerWMm), sh = Mm(CompactStickerHMm);
-            double side = sw * 0.20;      // left text column
-            double bottom = sh * 0.30;    // bottom text row (room for two lines)
+            double side = sw * 0.16;      // left text column (thin, so the QR code gets the room)
+            double bottom = sh * 0.24;    // bottom text row
             double pad = Mm(0.15);
             double font = side * 0.9;     // the text is shrunk from here when it does not fit
             string serial = Serial(number);
 
-            // long part numbers go on two lines, cut after the first "-"   (73237-BZ010-B11  ->  73237- / BZ010-B11)
+            // long part numbers (more than 11 characters) go on two lines, cut after the first "-"   (73237-BZ010-B11  ->  73237- / BZ010-B11)
             string pn = _product.PartNumber ?? "";
             int dash = pn.IndexOf('-');
-            string pnText = (dash > 0 && dash < pn.Length - 1) ? pn.Substring(0, dash + 1) + "\n" + pn.Substring(dash + 1) : pn;
+            string pnText = (pn.Length > 11 && dash > 0 && dash < pn.Length - 1) ? pn.Substring(0, dash + 1) + "\n" + pn.Substring(dash + 1) : pn;
 
             var sticker = new Grid
             {
@@ -489,7 +517,7 @@ namespace DailyScheduler
             FrameworkElement left = FitText(leftText, font, true, -90, pad);
             Grid.SetRowSpan(left, 2);
             Place(sticker, left, 0, 0, 1);
-            Place(sticker, MakeQr(serial, Mm(0.2)), 0, 1, 1);
+            Place(sticker, MakeQr(serial, Mm(0.1)), 0, 1, 1);
             Place(sticker, FitText(pnText, font, true, 0, pad), 1, 1, 1);
 
             // the sticker sits in the middle of its slot on the backing paper
