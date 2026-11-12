@@ -81,7 +81,6 @@ namespace DailyScheduler
         private LineProduction _loadedLine;     // line of the schedule currently on screen
         private bool _dirty;                    // true = the grid has changes that are not saved yet
         private bool _reverting;                // true while we put the date / line controls back ourselves
-        private const string LinePlaceholder = "Pilih line produksi";
 
         private void Selection_Changed(object sender, EventArgs e)
         {
@@ -165,7 +164,7 @@ namespace DailyScheduler
             var selected = cmb.SelectedItem as LineProduction;
 
             // Placeholder, empty, or just the picked name: not typing, show the whole list
-            if (string.IsNullOrWhiteSpace(text) || text == LinePlaceholder || (selected != null && selected.Name == text))
+            if (string.IsNullOrWhiteSpace(text) || (selected != null && selected.Name == text))
             {
                 view.Filter = null;
                 return;
@@ -205,7 +204,7 @@ namespace DailyScheduler
                     }
                     else
                     {
-                        cmb.Text = LinePlaceholder;
+                        cmb.Text = string.Empty; 
                     }
                 }
                 finally { _resettingText = false; }
