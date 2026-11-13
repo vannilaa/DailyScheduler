@@ -49,14 +49,17 @@ namespace DailyScheduler
         {
             try
             {
-                var products = Database.GetProducts();
-                ScheduleRow.AllProducts = products.Where(p => !p.Discontinued).ToList();
-                ScheduleRow.Products = products.ToDictionary(p => p.Barcode);
+                // One round-trip for all three startup datasets.
+                var (lines, products, printers) = Database.GetStartupData();
 
-                cbLineProduction.ItemsSource = Database.GetLineProductions();
+                ScheduleRow.AllProducts = products.Where(p => !p.Discontinued).ToList();
+                ScheduleRow.Products    = products.ToDictionary(p => p.Barcode);
+                ScheduleRow.RebuildIndex();   // build per-field lookup for fast Recompute
+
+                cbLineProduction.ItemsSource = lines;
 
                 ScheduleRow.PrinterList.Clear();
-                ScheduleRow.PrinterList.AddRange(Database.GetPrinters());
+                ScheduleRow.PrinterList.AddRange(printers);
             }
             catch (Exception ex)
             {
@@ -400,10 +403,14 @@ namespace DailyScheduler
 
         private void UpdateTotals()
         {
-            txtTotalJumlah.Text = _rows.Sum(r => r.Jumlah).ToString(CultureInfo.CurrentCulture);
-            // Total Box: at most 3 decimals (6 -> "6", 2.2117647 -> "2.212"). Total Jam: hours:minutes. The rows themselves stay unrounded.
-            txtTotalBox.Text = _rows.Sum(r => r.JumlahBox ?? 0).ToString("0.###", CultureInfo.CurrentCulture);
-            txtTotalJam.Text = ScheduleRow.FormatJam(_rows.Sum(r => r.JumlahJam ?? 0));   // hours:minutes
+            // Single pass over _rows instead of three separate LINQ sums.
+            int totalJml = 0; double totalBox = 0, totalJam = 0;
+            foreach (var r in _rows) { totalJml += r.Jumlah; totalBox += r.JumlahBox ?? 0; totalJam += r.JumlahJam ?? 0; }
+
+            txtTotalJumlah.Text = totalJml.ToString(CultureInfo.CurrentCulture);
+            // Total Box: at most 3 decimals (6 -> "6", 2.2117647 -> "2.212"). Total Jam: hours:minutes.
+            txtTotalBox.Text = totalBox.ToString("0.###", CultureInfo.CurrentCulture);
+            txtTotalJam.Text = ScheduleRow.FormatJam(totalJam);
         }
 
         // ------------------------------------------------------------------ Jumlah box: digits only
@@ -623,22 +630,22 @@ namespace DailyScheduler
             // Only when the focus comes from a mouse click (a click on a list item gives the focus back after the button is released)
             if (Mouse.LeftButton != MouseButtonState.Pressed) return;
 
-            // Wait until the mouse button is released, then select the old text and open the list
-            var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(30) };
-            int tries = 0;
-            timer.Tick += delegate
-            {
-                tries++;
-                if (Mouse.LeftButton == MouseButtonState.Pressed && tries < 40) return;
+            // Subscribe to the window's PreviewMouseLeftButtonUp so we catch release anywhere on screen —
+            // no busy-wait polling, one event that fires exactly once then removes itself.
+            var win = Window.GetWindow(cmb);
+            if (win == null) return;
 
-                timer.Stop();
-                if (!cmb.IsKeyboardFocusWithin) return;      // the user already moved on
+            MouseButtonEventHandler[] handlerRef = { null };
+            handlerRef[0] = delegate
+            {
+                win.PreviewMouseLeftButtonUp -= handlerRef[0];
+                if (!cmb.IsKeyboardFocusWithin) return;   // focus moved on before the button was released
 
                 TextBox tb = GetEditBox(cmb);
                 if (tb != null) tb.SelectAll();
                 if (cmb.Items.Count > 0) cmb.IsDropDownOpen = true;
             };
-            timer.Start();
+            win.PreviewMouseLeftButtonUp += handlerRef[0];
         }
     }
 }

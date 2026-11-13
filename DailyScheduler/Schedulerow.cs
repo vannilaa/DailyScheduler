@@ -33,6 +33,74 @@ namespace DailyScheduler
         // The four filter fields, by index.
         private const int Cust = 0, PartNo = 1, ModelIdx = 2, Job = 3;
 
+        // ---- product index (built once after AllProducts is loaded) ----
+        // _fieldIndex[f]["Toyota"] = all products whose field f == "Toyota"
+        // Allows GetMatchingProducts to start from the smallest matching subset
+        // rather than scanning all of AllProducts every time.
+        private static Dictionary<string, List<ProductInfo>>[] _fieldIndex;
+
+        /// <summary>
+        /// Call once after AllProducts is populated. Builds a per-field lookup so
+        /// Recompute can start from the smallest matching subset instead of scanning
+        /// all products 5 times on every keystroke.
+        /// </summary>
+        public static void RebuildIndex()
+        {
+            _fieldIndex = new Dictionary<string, List<ProductInfo>>[4];
+            for (int f = 0; f < 4; f++)
+            {
+                _fieldIndex[f] = new Dictionary<string, List<ProductInfo>>(StringComparer.OrdinalIgnoreCase);
+                foreach (var p in AllProducts)
+                {
+                    string v = Field(p, f);
+                    if (v == null) continue;
+                    List<ProductInfo> bucket;
+                    if (!_fieldIndex[f].TryGetValue(v, out bucket))
+                        _fieldIndex[f][v] = bucket = new List<ProductInfo>();
+                    bucket.Add(p);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Returns all products that satisfy every active pick, except the one for field
+        /// <paramref name="skip"/> (pass -1 to apply all picks).  When the index is
+        /// available the method starts from the smallest indexed bucket and only checks
+        /// the remaining picks — O(subset) instead of O(AllProducts).
+        /// </summary>
+        private List<ProductInfo> GetMatchingProducts(int skip)
+        {
+            if (_fieldIndex == null)
+                return AllProducts.Where(p => Matches(p, skip)).ToList();
+
+            // Find the indexed pick whose bucket is smallest (excluding 'skip').
+            List<ProductInfo> startSet = null;
+            int startField = -1;
+            for (int f = 0; f < 4; f++)
+            {
+                if (f == skip || _pick[f] == null) continue;
+                List<ProductInfo> bucket;
+                if (!_fieldIndex[f].TryGetValue(_pick[f], out bucket))
+                    return new List<ProductInfo>();   // pick value not in master list → no candidates
+                if (startSet == null || bucket.Count < startSet.Count)
+                { startSet = bucket; startField = f; }
+            }
+
+            if (startSet == null) return AllProducts;   // no applicable picks → everything matches
+
+            // Filter the smallest bucket by the remaining picks (skipping startField and skip).
+            int capturedSkip = skip, capturedStart = startField;
+            return startSet.Where(p =>
+            {
+                for (int f = 0; f < 4; f++)
+                {
+                    if (f == capturedSkip || f == capturedStart || _pick[f] == null) continue;
+                    if (Field(p, f) != _pick[f]) return false;
+                }
+                return true;
+            }).ToList();
+        }
+
         private readonly string[] _pick = new string[4];                      // what the user chose (null = nothing)
         private readonly string[] _shown = new string[4];                     // what the cell displays
         private readonly List<string>[] _options = new List<string>[4];       // dropdown items per field
@@ -191,11 +259,11 @@ namespace DailyScheduler
                 // Dropdown items per field: the values that still fit the OTHER picks (so you can always change a pick).
                 for (int f = 0; f < 4; f++)
                 {
+                    var matching = GetMatchingProducts(f);   // uses index; much cheaper than scanning AllProducts
                     var values = new List<string>();
                     var seen = new HashSet<string>();
-                    foreach (ProductInfo p in AllProducts)
+                    foreach (ProductInfo p in matching)
                     {
-                        if (!Matches(p, f)) continue;
                         string v = Field(p, f);
                         if (v != null && seen.Add(v)) values.Add(v);
                     }
@@ -204,7 +272,7 @@ namespace DailyScheduler
                 }
 
                 // Products that still fit ALL the user's picks.
-                var cand = AllProducts.Where(p => Matches(p, -1)).ToList();
+                var cand = GetMatchingProducts(-1);
 
                 // Auto-fill: a field the user has not picked, that offers exactly ONE value while some of the
                 // remaining products have it blank, takes that value. (Blanks are not offered in a dropdown, so

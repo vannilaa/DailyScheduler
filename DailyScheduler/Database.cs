@@ -124,6 +124,61 @@ namespace DailyScheduler
 
         // ---------------------------------------------------------------- lookups
 
+        /// <summary>
+        /// Loads all three startup datasets in a single round-trip (one connection, one
+        /// multi-statement batch, three result sets) instead of three separate calls.
+        /// </summary>
+        public static (List<LineProduction> Lines, List<ProductInfo> Products, List<string> Printers) GetStartupData()
+        {
+            var lines    = new List<LineProduction>();
+            var products = new List<ProductInfo>();
+            var printers = new List<string>();
+
+            using (var con = Open())
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText =
+                    // result set 1 — line_production
+                    "SELECT id, name, map_code FROM line_production ORDER BY id; " +
+                    // result set 2 — product master
+                    "SELECT barcode, COALESCE(part_number_code, part_number) + COALESCE(' - ' + model, ''), " +
+                    "       customer, model, part, job_no, assembly, qty_per_box, target_per_jam, printer, " +
+                    "       COALESCE(part_number_code, part_number), discontinued, position " +
+                    "FROM product ORDER BY COALESCE(part_number_code, part_number), model; " +
+                    // result set 3 — distinct printers
+                    "SELECT DISTINCT printer FROM product WHERE printer IS NOT NULL ORDER BY printer";
+
+                using (var r = cmd.ExecuteReader())
+                {
+                    while (r.Read())
+                        lines.Add(new LineProduction { Id = r.GetInt32(0), Name = r.GetString(1), MapCode = r.GetString(2) });
+
+                    r.NextResult();
+                    while (r.Read())
+                        products.Add(new ProductInfo
+                        {
+                            Barcode      = r.GetString(0),
+                            DisplayName  = r.GetString(1),
+                            Customer     = Str(r, 2),
+                            Model        = Str(r, 3),
+                            Part         = Str(r, 4),
+                            JobNo        = Str(r, 5),
+                            Assembly     = Str(r, 6),
+                            QtyPerBox    = r.GetInt32(7),
+                            TargetPerJam = r.GetInt32(8),
+                            Printer      = Str(r, 9),
+                            PartNumber   = r.GetString(10),
+                            Discontinued = r.GetBoolean(11),
+                            Position     = Str(r, 12)
+                        });
+
+                    r.NextResult();
+                    while (r.Read()) printers.Add(r.GetString(0));
+                }
+            }
+            return (lines, products, printers);
+        }
+
         public static List<LineProduction> GetLineProductions()
         {
             var list = new List<LineProduction>();
@@ -265,21 +320,32 @@ namespace DailyScheduler
                     cmd.ExecuteNonQuery();
                 }
 
-                // 4. insert the current rows
-                foreach (var item in items)
+                // 4. insert the current rows in chunks (same multi-row approach as FillNumberTable)
+                // 6 params per row × 100 rows = 600 params — well below SQL Server's 2 100-param limit.
+                const int insertChunk = 100;
+                for (int ci = 0; ci < items.Count; ci += insertChunk)
                 {
+                    int count = Math.Min(insertChunk, items.Count - ci);
+                    var sql = new StringBuilder(
+                        "INSERT INTO schedule_item (schedule_id, urutan, barcode, jumlah, cetak_box, printer) VALUES ");
                     using (var cmd = con.CreateCommand())
                     {
                         cmd.Transaction = tx;
-                        cmd.CommandText =
-                            "INSERT INTO schedule_item (schedule_id, urutan, barcode, jumlah, cetak_box, printer) " +
-                            "VALUES (@id, @urutan, @barcode, @jumlah, @cetak, @printer)";
-                        cmd.Parameters.AddWithValue("@id", scheduleId);
-                        cmd.Parameters.AddWithValue("@urutan", item.Urutan);
-                        cmd.Parameters.AddWithValue("@barcode", item.Barcode);
-                        cmd.Parameters.AddWithValue("@jumlah", item.Jumlah);
-                        cmd.Parameters.AddWithValue("@cetak", item.CetakBox);
-                        cmd.Parameters.AddWithValue("@printer", (object)item.Printer ?? DBNull.Value);
+                        for (int j = 0; j < count; j++)
+                        {
+                            var item = items[ci + j];
+                            if (j > 0) sql.Append(',');
+                            sql.Append("(@id").Append(j).Append(",@u").Append(j)
+                               .Append(",@b").Append(j).Append(",@j").Append(j)
+                               .Append(",@c").Append(j).Append(",@p").Append(j).Append(')');
+                            cmd.Parameters.AddWithValue("@id" + j, scheduleId);
+                            cmd.Parameters.AddWithValue("@u" + j,  item.Urutan);
+                            cmd.Parameters.AddWithValue("@b" + j,  item.Barcode);
+                            cmd.Parameters.AddWithValue("@j" + j,  item.Jumlah);
+                            cmd.Parameters.AddWithValue("@c" + j,  item.CetakBox);
+                            cmd.Parameters.AddWithValue("@p" + j,  (object)item.Printer ?? DBNull.Value);
+                        }
+                        cmd.CommandText = sql.ToString();
                         cmd.ExecuteNonQuery();
                     }
                 }

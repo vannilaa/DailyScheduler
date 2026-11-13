@@ -37,6 +37,7 @@ namespace DailyScheduler
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             MaxLength = 500
         };
+        private readonly TextBlock _noteLabel = new TextBlock { Text = "Catatan (wajib):", FontSize = 16, Visibility = Visibility.Collapsed };
         private readonly Button _ok = new Button { Content = "Cetak ulang", Width = 130, Padding = new Thickness(5), Margin = new Thickness(0, 0, 8, 0), FontSize = 16, IsEnabled = false };
 
         public string Reason { get; private set; }
@@ -75,8 +76,9 @@ namespace DailyScheduler
             foreach (string reason in Reasons) _reason.Items.Add(reason);
             root.Children.Add(_reason);
 
-            root.Children.Add(new TextBlock { Text = "Catatan (wajib jika alasannya \"Lainnya\"):", FontSize = 16 });
+            root.Children.Add(_noteLabel);
             _note.Margin = new Thickness(0, 4, 0, 14);
+            _note.Visibility = Visibility.Collapsed;
             root.Children.Add(_note);
 
             var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
@@ -99,7 +101,13 @@ namespace DailyScheduler
         private void UpdateOk()
         {
             string reason = _reason.SelectedItem as string;
-            bool ok = reason != null && (reason != OtherReason || !string.IsNullOrWhiteSpace(_note.Text));
+            bool isOther = reason == OtherReason;
+
+            // Show the note field only when "Lainnya" is selected.
+            _noteLabel.Visibility = isOther ? Visibility.Visible : Visibility.Collapsed;
+            _note.Visibility     = isOther ? Visibility.Visible : Visibility.Collapsed;
+
+            bool ok = reason != null && (!isOther || !string.IsNullOrWhiteSpace(_note.Text));
             _ok.IsEnabled = ok;
         }
     }
