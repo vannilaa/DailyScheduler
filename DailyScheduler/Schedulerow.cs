@@ -271,41 +271,71 @@ namespace DailyScheduler
                 // Products that still fit ALL the user's picks.
                 var cand = GetMatchingProducts(-1);
 
-                // Auto-fill: a field the user has not picked, that offers exactly ONE value while some of the
-                // remaining products have it blank, takes that value. (Blanks are not offered in a dropdown, so
-                // without this the cell stayed empty although the dropdown only had one item.)
-                // This narrows the remaining products, which can in turn settle other fields, so repeat until stable.
-                bool narrowed = true;
-                while (narrowed)
-                {
-                    narrowed = false;
-                    for (int f = 0; f < 4; f++)
-                    {
-                        if (_pick[f] != null) continue;
+                bool hasManualPick = _pick.Any(p => p != null);
 
-                        var values = cand.Select(p => Field(p, f)).Where(v => v != null).Distinct().ToList();
-                        if (values.Count == 1 && cand.Any(p => Field(p, f) == null))
+                // Auto-fill: when the user has picked at least one field (not on initial empty choosing),
+                // any field where remaining candidates offer exactly ONE non-empty value should be auto-filled.
+                // This narrows the remaining candidates, which can in turn settle other fields, so repeat until stable.
+                if (hasManualPick)
+                {
+                    bool narrowed = true;
+                    while (narrowed)
+                    {
+                        narrowed = false;
+                        for (int f = 0; f < 4; f++)
                         {
-                            string only = values[0];
-                            int field = f;
-                            cand = cand.Where(p => Field(p, field) == only).ToList();
-                            narrowed = true;
+                            if (_pick[f] != null) continue;
+
+                            var values = cand.Select(p => Field(p, f)).Where(v => !string.IsNullOrEmpty(v)).Distinct().ToList();
+                            if (values.Count == 1)
+                            {
+                                string only = values[0];
+                                if (cand.Any(p => Field(p, f) != only))
+                                {
+                                    cand = cand.Where(p => Field(p, f) == only).ToList();
+                                    narrowed = true;
+                                }
+                            }
                         }
                     }
                 }
                 _candidates = cand;
 
-                // What each cell shows: the pick, or the only value that is still possible.
-                bool everythingDecided = _candidates.Count > 0;
+                // What each cell shows:
+                // If manually picked: that pick.
+                // If not initial choosing and candidates offer exactly 1 non-empty value (or options list has 1 item): that value.
+                // Otherwise: null.
                 for (int f = 0; f < 4; f++)
                 {
-                    var distinct = _candidates.Select(p => Field(p, f)).Distinct().ToList();
-                    if (distinct.Count != 1) everythingDecided = false;
-                    _shown[f] = _pick[f] ?? (distinct.Count == 1 ? distinct[0] : null);
+                    if (_pick[f] != null)
+                    {
+                        _shown[f] = _pick[f];
+                    }
+                    else if (hasManualPick)
+                    {
+                        var values = _candidates.Select(p => Field(p, f)).Where(v => !string.IsNullOrEmpty(v)).Distinct().ToList();
+                        if (values.Count == 1)
+                            _shown[f] = values[0];
+                        else if (_options[f].Count == 1)
+                            _shown[f] = _options[f][0];
+                        else
+                            _shown[f] = null;
+                    }
+                    else
+                    {
+                        _shown[f] = null;
+                    }
                 }
 
                 // One product left = the row is complete. (If several products look identical in all four
                 // fields, the first of them is used.)
+                bool everythingDecided = _candidates.Count > 0;
+                for (int f = 0; f < 4; f++)
+                {
+                    if (string.IsNullOrEmpty(_shown[f]))
+                        everythingDecided = false;
+                }
+
                 if (_candidates.Count == 1 || (_candidates.Count > 1 && everythingDecided))
                     _product = _candidates[0];
                 else

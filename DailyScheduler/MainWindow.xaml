@@ -40,7 +40,7 @@
             <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="HorizontalAlignment" Value="Left"/>
             <Setter Property="Padding" Value="5"/>
-            <Setter Property="Margin" Value="5"/>
+            <Setter Property="Margin" Value="5,5,20,5"/>
         </Style>
 
         <!-- Long text in cells (customer, Model): cut with "..." instead of wrapping -->
@@ -115,7 +115,8 @@
                       PreviewMouseLeftButtonDown="SearchableComboBox_PreviewMouseLeftButtonDown"
                       GotKeyboardFocus="LineCombo_GotKeyboardFocus"
                       LostKeyboardFocus="LineCombo_LostKeyboardFocus"
-                      PreviewKeyDown="LineCombo_PreviewKeyDown"/>
+                      PreviewKeyDown="LineCombo_PreviewKeyDown"
+                      DropDownClosed="SearchableComboBox_DropDownClosed"/>
                 <TextBlock Grid.Row="1" Grid.Column="1" Text="Pilih line produksi"
                    Foreground="Gray" FontStyle="Italic" FontSize="24"
                    Margin="10,5,0,0" HorizontalAlignment="Left" VerticalAlignment="Center"
@@ -220,7 +221,7 @@
 
                 <!-- Row selector -->
                 <!-- 1-Click Row selector -->
-                <DataGridTemplateColumn Header="" Width="40">
+                <DataGridTemplateColumn Header="" Width="35">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
                             <CheckBox IsChecked="{Binding IsSelected, UpdateSourceTrigger=PropertyChanged}" 
@@ -229,7 +230,7 @@
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
 
-                <DataGridTextColumn Header="Urutan" Width="55" IsReadOnly="True"
+                <DataGridTextColumn Header="Uru&#x0a;tan" Width="35" IsReadOnly="True"
                                     Binding="{Binding Urutan}"
                                     ElementStyle="{StaticResource CellTrimStyle}"/>
 
@@ -245,7 +246,9 @@
                                       IsEditable="True" IsTextSearchEnabled="False" StaysOpenOnEdit="True"
                                       TextBoxBase.TextChanged="SearchableComboBox_TextChanged"
                                       PreviewMouseLeftButtonDown="SearchableComboBox_PreviewMouseLeftButtonDown"
-                                      LostKeyboardFocus="SearchableComboBox_LostKeyboardFocus"/>
+                                      LostKeyboardFocus="SearchableComboBox_LostKeyboardFocus"
+                                      DropDownClosed="SearchableComboBox_DropDownClosed"
+                                      SelectionChanged="SearchableComboBox_SelectionChanged"/>
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
@@ -260,7 +263,9 @@
                                       IsEditable="True" IsTextSearchEnabled="False" StaysOpenOnEdit="True"
                                       TextBoxBase.TextChanged="SearchableComboBox_TextChanged"
                                       PreviewMouseLeftButtonDown="SearchableComboBox_PreviewMouseLeftButtonDown"
-                                      LostKeyboardFocus="SearchableComboBox_LostKeyboardFocus"/>
+                                      LostKeyboardFocus="SearchableComboBox_LostKeyboardFocus"
+                                      DropDownClosed="SearchableComboBox_DropDownClosed"
+                                      SelectionChanged="SearchableComboBox_SelectionChanged"/>
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
@@ -279,7 +284,9 @@
                                       IsEditable="True" IsTextSearchEnabled="False" StaysOpenOnEdit="True"
                                       TextBoxBase.TextChanged="SearchableComboBox_TextChanged"
                                       PreviewMouseLeftButtonDown="SearchableComboBox_PreviewMouseLeftButtonDown"
-                                      LostKeyboardFocus="SearchableComboBox_LostKeyboardFocus"/>
+                                      LostKeyboardFocus="SearchableComboBox_LostKeyboardFocus"
+                                      DropDownClosed="SearchableComboBox_DropDownClosed"
+                                      SelectionChanged="SearchableComboBox_SelectionChanged"/>
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
@@ -294,7 +301,9 @@
                                       IsEditable="True" IsTextSearchEnabled="False" StaysOpenOnEdit="True"
                                       TextBoxBase.TextChanged="SearchableComboBox_TextChanged"
                                       PreviewMouseLeftButtonDown="SearchableComboBox_PreviewMouseLeftButtonDown"
-                                      LostKeyboardFocus="SearchableComboBox_LostKeyboardFocus"/>
+                                      LostKeyboardFocus="SearchableComboBox_LostKeyboardFocus"
+                                      DropDownClosed="SearchableComboBox_DropDownClosed"
+                                      SelectionChanged="SearchableComboBox_SelectionChanged"/>
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
@@ -378,10 +387,10 @@
         <Border Grid.Row="2" Background="White" BorderThickness="1" BorderBrush="LightGray">
             <Grid Margin="10,8">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="150"/>
-                    <ColumnDefinition Width="120"/>
-                    <ColumnDefinition Width="120"/>
-                    <ColumnDefinition Width="120"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>

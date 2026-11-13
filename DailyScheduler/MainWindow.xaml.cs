@@ -94,6 +94,7 @@ namespace DailyScheduler
             if (key == _loadedKey)              // this schedule is already on screen: do not reload (it would drop unsaved rows)
             {
                 _selectedLine = line;
+                ResetScrollToStart(cbLineProduction);
                 return;
             }
 
@@ -109,6 +110,7 @@ namespace DailyScheduler
             _loadedKey = key;
             _loadedDate = dpTanggal.SelectedDate.Value;
             _loadedLine = line;
+            ResetScrollToStart(cbLineProduction);
             LoadSchedule();
         }
 
@@ -136,6 +138,7 @@ namespace DailyScheduler
                 {
                     cbLineProduction.SelectedItem = _loadedLine;
                     cbLineProduction.Text = _loadedLine.Name;
+                    ResetScrollToStart(cbLineProduction);
                 }
                 _selectedLine = _loadedLine;
             }
@@ -203,6 +206,8 @@ namespace DailyScheduler
                     }
                 }
                 finally { _resettingText = false; }
+                ScrollEditBoxToStart(cmb);
+                ResetScrollToStart(cmb);
             }), DispatcherPriority.Background);
         }
 
@@ -399,10 +404,25 @@ namespace DailyScheduler
             int totalJml = 0; double totalBox = 0, totalJam = 0;
             foreach (var r in _rows) { totalJml += r.Jumlah; totalBox += r.JumlahBox ?? 0; totalJam += r.JumlahJam ?? 0; }
 
-            txtTotalJumlah.Text = totalJml.ToString(CultureInfo.CurrentCulture);
-            // Total Box: at most 3 decimals (6 -> "6", 2.2117647 -> "2.212"). Total Jam: hours:minutes.
-            txtTotalBox.Text = totalBox.ToString("0.###", CultureInfo.CurrentCulture);
-            txtTotalJam.Text = ScheduleRow.FormatJam(totalJam);
+            txtTotalJumlah.Text = $"{totalJml.ToString(CultureInfo.CurrentCulture)} item";
+            // Total Box: at most 1 decimals 
+            txtTotalBox.Text = $"{totalBox.ToString("0.#", CultureInfo.CurrentCulture)} box";
+            txtTotalJam.Text = FormatTotalJam(totalJam);
+        }
+
+        private static string FormatTotalJam(double totalJam)
+        {
+            int totalMinutes = (int)Math.Round(totalJam * 60, MidpointRounding.AwayFromZero);
+            int hours = totalMinutes / 60;
+            int minutes = totalMinutes % 60;
+
+            if (hours > 0 && minutes > 0)
+                return $"{hours} jam {minutes} menit";
+            if (hours > 0)
+                return $"{hours} jam";
+            if (minutes > 0)
+                return $"{minutes} menit";
+            return "0 menit";
         }
 
         // ------------------------------------------------------------------ Jumlah box: digits only
@@ -535,6 +555,29 @@ namespace DailyScheduler
             return cmb.Template.FindName("PART_EditableTextBox", cmb) as TextBox;
         }
 
+        // Resets caret and horizontal scroll to the beginning so long names are fully readable from start.
+        private static void ScrollEditBoxToStart(ComboBox cmb)
+        {
+            if (cmb == null) return;
+            TextBox tb = GetEditBox(cmb);
+            if (tb != null)
+            {
+                tb.Select(0, 0);
+                tb.CaretIndex = 0;
+                tb.ScrollToHome();
+                tb.ScrollToHorizontalOffset(0);
+            }
+        }
+
+        private static void ResetScrollToStart(ComboBox cmb)
+        {
+            if (cmb == null) return;
+            cmb.Dispatcher.BeginInvoke(new Action(delegate
+            {
+                ScrollEditBoxToStart(cmb);
+            }), DispatcherPriority.Background);
+        }
+
         // Opens the list while the user is typing WITHOUT letting WPF select the text (the next letter would replace it).
         private static void OpenDropDownKeepCaret(ComboBox cmb)
         {
@@ -586,6 +629,28 @@ namespace DailyScheduler
             };
             cmb.PreviewMouseLeftButtonUp += up;
         }
+
+        private void SearchableComboBox_DropDownClosed(object sender, EventArgs e)
+        {
+            var cmb = sender as ComboBox;
+            if (cmb == null || !cmb.IsEditable) return;
+            if (cmb.SelectedItem != null || !cmb.IsKeyboardFocusWithin)
+            {
+                ScrollEditBoxToStart(cmb);
+                ResetScrollToStart(cmb);
+            }
+        }
+
+        private void SearchableComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            var cmb = sender as ComboBox;
+            if (cmb == null || !cmb.IsEditable) return;
+            if (e.AddedItems != null && e.AddedItems.Count > 0)
+            {
+                ResetScrollToStart(cmb);
+            }
+        }
+
         // When the user leaves the box with text that was never picked, put back what the row really holds.
         private void SearchableComboBox_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
         {
@@ -595,10 +660,18 @@ namespace DailyScheduler
                 if (cmb.IsKeyboardFocusWithin || cmb.IsDropDownOpen) return;   // still being used (focus moved into the list)
 
                 var row = cmb.DataContext as ScheduleRow;
-                if (row == null) return;
+                if (row == null)
+                {
+                    ScrollEditBoxToStart(cmb);
+                    return;
+                }
 
                 string shown = row.GetShown(cmb.Tag as string) ?? string.Empty;
-                if (cmb.Text == shown) return;
+                if (cmb.Text == shown)
+                {
+                    ScrollEditBoxToStart(cmb);
+                    return;
+                }
 
                 _resettingText = true;
                 try
@@ -611,16 +684,28 @@ namespace DailyScheduler
                     _resettingText = false;
                 }
                 SetListFilter(cmb, null);
+                ScrollEditBoxToStart(cmb);
+                ResetScrollToStart(cmb);
             }), DispatcherPriority.Background);
         }
 
         private static void FilterCombo_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
         {
             var cmb = sender as ComboBox;
-            if (cmb == null || !(cmb.DataContext is ScheduleRow)) return;   // only the filter boxes inside the grid
+            // Only the editable filter dropdowns (Customer, Part Number, Model, Job No) inside the grid row
+            if (cmb == null || !cmb.IsEditable || cmb.Tag == null || !(cmb.DataContext is ScheduleRow)) return;
+            if (cmb.IsDropDownOpen) return;
 
             // Only when the focus comes from a mouse click (a click on a list item gives the focus back after the button is released)
             if (Mouse.LeftButton != MouseButtonState.Pressed) return;
+
+            // If the user clicked the arrow/toggle button directly, let the button handle open/close naturally
+            DependencyObject d = Mouse.DirectlyOver as DependencyObject;
+            while (d != null && !ReferenceEquals(d, cmb))
+            {
+                if (d is ToggleButton) return;
+                d = VisualTreeHelper.GetParent(d);
+            }
 
             // Subscribe to the window's PreviewMouseLeftButtonUp so we catch release anywhere on screen —
             // no busy-wait polling, one event that fires exactly once then removes itself.
