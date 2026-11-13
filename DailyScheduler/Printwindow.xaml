@@ -43,33 +43,33 @@
 
                         <RadioButton x:Name="rbList" GroupName="mode" Margin="0,8,0,0"
                                      Content="Satuan (pisahkan dengan koma)" Checked="Input_Changed"/>
-                        <TextBox x:Name="tbList" Margin="24,4,0,0"
+                        <TextBox x:Name="tbList" Margin="24,4,15,0"
                                  ToolTip="Contoh: 2,3,80,365   atau campuran: 1-10,25,80"
                                  TextChanged="Input_Changed"/>
                         <TextBlock Text="Contoh: 2,3,80,365 (boleh juga 1-10,25)" Foreground="Gray" FontSize="13" Margin="24,2,0,0"/>
 
-                        <TextBlock Text="Ukuran stiker" FontWeight="SemiBold" Margin="0,16,0,0"/>
-                        <ComboBox x:Name="cbLayout" Margin="0,4,0,0" SelectionChanged="Setup_Changed">
+                        <TextBlock Text="Ukuran stiker" FontWeight="SemiBold" Margin="0,16,15,0"/>
+                        <ComboBox x:Name="cbLayout" Margin="0,4,15,0" SelectionChanged="Setup_Changed">
                             <ComboBoxItem Content="2 × 10 cm   (5 stiker per lembar)"/>
                             <ComboBoxItem Content="2,5 × 10 cm   (4 stiker per lembar)"/>
                             <ComboBoxItem Content="1,5 × 10 cm   (8 stiker per lembar)"/>
                         </ComboBox>
 
                         <TextBlock Text="Printer" FontWeight="SemiBold" Margin="0,16,0,0"/>
-                        <ComboBox x:Name="cbPrinter" Margin="0,4,0,0" SelectionChanged="Setup_Changed"/>
+                        <ComboBox x:Name="cbPrinter" Margin="0,4,15,0" SelectionChanged="Setup_Changed"/>
                         <TextBlock x:Name="txtPrinterNote" Foreground="#FFB36B00" FontSize="13" TextWrapping="Wrap" Margin="0,2,0,0"/>
 
-                        <TextBlock Text="Rotasi cetak" FontWeight="SemiBold" Margin="0,16,0,0"/>
-                        <ComboBox x:Name="cbRotation" Margin="0,4,0,0" SelectionChanged="Input_Changed">
+                        <TextBlock Text="Rotasi cetak" FontWeight="SemiBold" Margin="0,16,15,0"/>
+                        <ComboBox x:Name="cbRotation" Margin="0,4,15,0" SelectionChanged="Input_Changed">
                             <ComboBoxItem Content="0° (normal)"/>
                             <ComboBoxItem Content="90°"/>
                             <ComboBoxItem Content="180°"/>
                             <ComboBoxItem Content="270°"/>
                         </ComboBox>
                         <TextBlock Text="Ubah hanya kalau hasil cetak miring / terbalik. Pratinjau tidak ikut berputar."
-                                   Foreground="Gray" FontSize="13" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                   Foreground="Gray" FontSize="13" TextWrapping="Wrap" Margin="0,2,15,0"/>
 
-                        <TextBlock Text="Geser posisi cetak (mm)" FontWeight="SemiBold" Margin="0,16,0,0"/>
+                        <TextBlock Text="Geser posisi cetak (mm)" FontWeight="SemiBold" Margin="0,16,15,0"/>
                         <Grid Margin="0,6,0,0">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="110"/>
@@ -107,7 +107,7 @@
                                        Margin="8,6,0,0" VerticalAlignment="Center"/>
                         </Grid>
                         <TextBlock Text="Putar scroll mouse di atas kotak (atau tombol panah): 0,5 mm per klik, tahan Shift untuk 0,1 mm. Tersimpan per printer dan per ukuran stiker. Pakai Cetak Tes untuk mencari angkanya."
-                                   Foreground="Gray" FontSize="13" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                   Foreground="Gray" FontSize="13" TextWrapping="Wrap" Margin="0,2,20,0"/>
                         
                         <Button x:Name="btnTest" Content="Cetak Tes" Width="100" Padding="5" Margin="0,20,0,0" FontSize="20" Click="btnTest_Click"/>
 

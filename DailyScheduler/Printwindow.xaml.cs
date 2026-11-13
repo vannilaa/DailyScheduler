@@ -9,6 +9,7 @@ using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Markup;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using QRCoder;
 
@@ -495,53 +496,159 @@ namespace DailyScheduler
         private const double CompactStickerWMm = 12.0;
         private const double CompactStickerHMm = 11.5;
 
-        /// <summary>1.5 cm stock. Left (vertical): map code + date + sticker number. Bottom: part number. The rest: QR code of the full serial.</summary>
-        private FrameworkElement BuildCompactSticker(int number, double cellWMm, double cellHMm)
-        {
-            double sw = Mm(CompactStickerWMm), sh = Mm(CompactStickerHMm);
-            double side = sw * 0.16;      // left text column (thin, so the QR code gets the room)
-            double bottom = sh * 0.24;    // bottom text row
-            double pad = Mm(0.15);
-            double font = side * 0.9;     // the text is shrunk from here when it does not fit
-            string serial = Serial(number);
+        // ---- The 1.25 cm stock (8 per strip): drawn as ONE black-and-white bitmap per strip ---------------------------
+        // At 12 x 11.5 mm a vector drawing gets re-drawn by the printer driver (it decides where the QR dots and the thin
+        // text fall), which made the print uneven. Here every dot is decided by us: 1 bitmap pixel = 1 printer dot (203 dpi),
+        // every QR module is a whole number of dots, and the text is switched to pure black / white.
+        private const double PrinterDpi = 203.0;
 
-            // long part numbers (more than 11 characters) go on two lines, cut after the first "-"   (73237-BZ010-B11  ->  73237- / BZ010-B11)
+        private static int Dots(double mm) { return (int)Math.Round(mm * PrinterDpi / 25.4); }
+
+        private FrameworkElement BuildCompactStripImage(IList<int> numbers, int perStrip, double cellWMm, double cellHMm)
+        {
+            int cw = Dots(cellWMm), ch = Dots(cellHMm);                                  // one slot: 100 x 120 dots
+            int sw = Dots(CompactStickerWMm), sh = Dots(CompactStickerHMm);              // the sticker in it: 96 x 92 dots
+            int width = cw * perStrip, height = ch;
+
+            var visual = new DrawingVisual();
+            using (DrawingContext dc = visual.RenderOpen())
+            {
+                dc.DrawRectangle(Brushes.White, null, new Rect(0, 0, width, height));
+                for (int i = 0; i < perStrip && i < numbers.Count; i++)
+                    DrawCompactSticker(dc, numbers[i], i * cw + (cw - sw) / 2, (ch - sh) / 2, sw, sh);
+            }
+
+            // drawn at 96 dpi on purpose: 1 unit = 1 pixel here, the real dpi is only attached to the finished bitmap
+            var target = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+            target.Render(visual);
+            int stride = width * 4;
+            var pixels = new byte[stride * height];
+            target.CopyPixels(pixels, stride, 0);
+
+            var bw = new byte[width * height];
+            for (int y = 0; y < height; y++)
+                for (int x = 0; x < width; x++)
+                {
+                    int o = y * stride + x * 4;
+                    int lum = (pixels[o] * 29 + pixels[o + 1] * 150 + pixels[o + 2] * 77) >> 8;   // B, G, R
+                    bw[y * width + x] = lum < 190 ? (byte)0 : (byte)255;                          // 190: a bit bolder than 128
+                }
+
+            BitmapSource bitmap = BitmapSource.Create(width, height, PrinterDpi, PrinterDpi, PixelFormats.Gray8, null, bw, width);
+            bitmap.Freeze();
+
+            var image = new Image
+            {
+                Source = bitmap,
+                Width = width * 96.0 / PrinterDpi,      // exactly 1 bitmap pixel per printer dot: nothing gets resampled
+                Height = height * 96.0 / PrinterDpi,
+                Stretch = Stretch.Fill,
+                SnapsToDevicePixels = false
+            };
+            RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
+            return image;
+        }
+
+        /// <summary>One 1.25 cm sticker. Left (vertical): map code + date + number. Right: QR code, part number under it.</summary>
+        private void DrawCompactSticker(DrawingContext dc, int number, int x, int y, int w, int h)
+        {
+            string serial = Serial(number);
+            bool[][] qr = QrModules(serial);
+            int n = qr.Length;
+
             string pn = _product.PartNumber ?? "";
             int dash = pn.IndexOf('-');
+            // long part numbers (more than 11 characters) go on two lines, cut after the first "-"   (73237-BZ010-B11  ->  73237- / BZ010-B11)
             string pnText = (pn.Length > 11 && dash > 0 && dash < pn.Length - 1) ? pn.Substring(0, dash + 1) + "\n" + pn.Substring(dash + 1) : pn;
+            int minPnH = pnText.Contains("\n") ? 24 : 14;           // least height the part number needs to stay readable
 
-            var sticker = new Grid
+            int leftW = Math.Max(14, (int)Math.Round(w * 0.17));
+            int rightX = x + leftW, rightW = w - leftW;
+            const int gap = 2;
+
+            // biggest whole number of dots per module that still fits (never less than 2)
+            int k = Math.Max(2, Math.Min((rightW - 2 * gap) / n, (h - 2 * gap - minPnH) / n));
+            int size = k * n;
+            int qx = rightX + (rightW - size) / 2, qy = y + gap;
+
+            for (int row = 0; row < n; row++)
             {
-                Width = sw,
-                Height = sh,
-                Background = Brushes.White,
-                SnapsToDevicePixels = false,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center
-            };
-            sticker.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(side) });
-            sticker.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            sticker.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-            sticker.RowDefinitions.Add(new RowDefinition { Height = new GridLength(bottom) });
+                int col = 0;
+                while (col < n)
+                {
+                    if (!qr[row][col]) { col++; continue; }
+                    int start = col;
+                    while (col < n && qr[row][col]) col++;
+                    dc.DrawRectangle(Brushes.Black, null, new Rect(qx + start * k, qy + row * k, (col - start) * k, k));
+                }
+            }
 
-            // left: map code . date + sticker number (e.g. 12.2611120001), over the full height of the sticker
+            int below = qy + size + 1;
+            DrawFitText(dc, pnText, new Rect(rightX, below, rightW, y + h - below), 0);
+
             string leftText = _mapCode + "." + _date.ToString("yyMMdd", CultureInfo.InvariantCulture) +
                               number.ToString("D4", CultureInfo.InvariantCulture);
-            FrameworkElement left = FitText(leftText, font, true, -90, pad);
-            Grid.SetRowSpan(left, 2);
-            Place(sticker, left, 0, 0, 1);
-            Place(sticker, MakeQr(serial, Mm(0.1)), 0, 1, 1);
-            Place(sticker, FitText(pnText, font, true, 0, pad), 1, 1, 1);
+            DrawFitText(dc, leftText, new Rect(x, y, leftW, h), -90);
+        }
 
-            // the sticker sits in the middle of its slot on the backing paper
-            var cell = new Grid { Width = Mm(cellWMm), Height = Mm(cellHMm) };
-            cell.Children.Add(sticker);
-            return cell;
+        /// <summary>Bold text centred in a box, as large as fits (never above the box height). angle: 0 or -90 (reads bottom to top).</summary>
+        private static void DrawFitText(DrawingContext dc, string text, Rect box, double angle)
+        {
+            if (string.IsNullOrEmpty(text) || box.Width < 1 || box.Height < 1) return;
+
+            bool turned = angle != 0;
+            double boxW = turned ? box.Height : box.Width;       // the box as the text itself sees it
+            double boxH = turned ? box.Width : box.Height;
+            var face = new Typeface(new FontFamily("Arial"), FontStyles.Normal, FontWeights.Bold, FontStretches.Normal);
+
+            double size = boxH;
+            FormattedText ft = null;
+            for (int i = 0; i < 3; i++)
+            {
+                ft = new FormattedText(text, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, face, size, Brushes.Black, 1.0);
+                double scale = Math.Min(boxW / ft.Width, boxH / ft.Height);
+                if (scale >= 0.995) break;
+                size *= scale * 0.98;
+            }
+            ft.MaxTextWidth = Math.Ceiling(ft.Width) + 1;     // so a two-line text is centred line by line
+            ft.TextAlignment = TextAlignment.Center;
+
+            double cx = box.X + box.Width / 2, cy = box.Y + box.Height / 2;
+            dc.PushTransform(new RotateTransform(angle, cx, cy));
+            dc.DrawText(ft, new Point(cx - ft.MaxTextWidth / 2, cy - ft.Height / 2));
+            dc.Pop();
+        }
+
+        /// <summary>QR modules without the empty border, as rows of true (dark) / false.</summary>
+        private static bool[][] QrModules(string text)
+        {
+            // level L: fewest modules, so each one can be as many printer dots as possible
+            var data = new QRCodeGenerator().CreateQrCode(text, QRCodeGenerator.ECCLevel.L);
+            var m = data.ModuleMatrix;
+            int total = m.Count, minX = total, minY = total, maxX = -1, maxY = -1;
+            for (int y = 0; y < total; y++)
+                for (int x = 0; x < total; x++)
+                    if (m[y][x])
+                    {
+                        if (x < minX) minX = x;
+                        if (x > maxX) maxX = x;
+                        if (y < minY) minY = y;
+                        if (y > maxY) maxY = y;
+                    }
+
+            int side = Math.Max(maxX - minX + 1, maxY - minY + 1);
+            var result = new bool[side][];
+            for (int y = 0; y < side; y++)
+            {
+                result[y] = new bool[side];
+                for (int x = 0; x < side; x++)
+                    result[y][x] = (y + minY) < total && (x + minX) < total && m[y + minY][x + minX];
+            }
+            return result;
         }
 
         private FrameworkElement BuildSticker(int number, double wMm, double hMm)
         {
-            if (wMm < 15) return BuildCompactSticker(number, wMm, hMm);   // the 8-per-strip stock
 
             double w = Mm(wMm), h = Mm(hMm);
             double side = w * 0.13;       // left / right text columns (thin, so the QR code gets the room)
@@ -575,6 +682,8 @@ namespace DailyScheduler
         /// <summary>One strip (10 cm wide). Slots without a number stay blank.</summary>
         private FrameworkElement BuildStrip(IList<int> numbers, double wMm, double hMm, int perStrip)
         {
+            if (wMm < 15) return BuildCompactStripImage(numbers, perStrip, wMm, hMm);   // the 8-per-strip stock
+
             var panel = new StackPanel { Orientation = Orientation.Horizontal, Background = Brushes.White };
             for (int i = 0; i < perStrip; i++)
             {
