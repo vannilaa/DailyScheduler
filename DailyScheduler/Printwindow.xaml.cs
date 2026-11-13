@@ -114,6 +114,7 @@ namespace DailyScheduler
         private readonly DateTime _date;
         private readonly string _mapCode;
         private readonly string _lineName;
+        private readonly int _lineId;
         private readonly int _jumlah;
         private readonly string _rowPrinter;
         private readonly Dictionary<string, PrintQueue> _queues =
@@ -130,6 +131,7 @@ namespace DailyScheduler
             _date = date;
             _mapCode = line.MapCode;
             _lineName = line.Name;
+            _lineId = line.Id;
             _jumlah = row.Jumlah;
             _rowPrinter = row.Printer;
 
@@ -891,6 +893,31 @@ namespace DailyScheduler
             if (MessageBox.Show(ask, "Cetak", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
                 return;
 
+            // Were some of these numbers printed before? Then a reason is required (nothing is printed without it).
+            string reprintReason = null, reprintNote = null;
+            if (!test)
+            {
+                List<PrintedSticker> already;
+                try
+                {
+                    already = Database.FindPrinted(_date, _lineId, _product.Barcode, numbers);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show("Riwayat cetak tidak bisa dibaca, jadi belum dicetak:\n\n" + ex.Message, "Database",
+                                    MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+
+                if (already.Count > 0)
+                {
+                    var reprint = new ReprintDialog(already) { Owner = this };
+                    if (reprint.ShowDialog() != true) return;
+                    reprintReason = reprint.Reason;
+                    reprintNote = reprint.Note;
+                }
+            }
+
             _lastLayout = cbLayout.SelectedIndex;
             _lastRotation = cbRotation.SelectedIndex;
             _offsets[OffsetKey()] = new[] { ReadMm(tbOffsetX), ReadMm(tbOffsetY) };
@@ -917,6 +944,36 @@ namespace DailyScheduler
             finally
             {
                 Cursor = Cursors.Arrow;
+            }
+
+            if (!test)
+            {
+                try
+                {
+                    Database.LogPrint(new PrintLogEntry
+                    {
+                        Tanggal = _date,
+                        LineProductionId = _lineId,
+                        LineName = _lineName,
+                        MapCode = _mapCode,
+                        Barcode = _product.Barcode,
+                        PartNumber = _product.PartNumber,
+                        Model = _product.Model,
+                        Printer = name,
+                        StickerSize = string.Format(CultureInfo.InvariantCulture, "{0:0.##} x {1:0.##} mm", wMm, hMm),
+                        Numbers = numbers,
+                        SerialOf = Serial,
+                        Reason = reprintReason,
+                        Note = reprintNote
+                    });
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show("Stiker sudah dikirim ke printer, tetapi riwayat cetaknya GAGAL disimpan:\n\n" + ex.Message +
+                                    "\n\nCatat nomor stiker yang baru dicetak ini secara manual.", "Riwayat cetak",
+                                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
             }
 
             MessageBox.Show("Terkirim ke printer.", "Cetak", MessageBoxButton.OK, MessageBoxImage.Information);
