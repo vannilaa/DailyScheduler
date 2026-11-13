@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-
-namespace DailyScheduler
+﻿namespace DailyScheduler
 {
     /// <summary>One entry of the Line Production dropdown (table line_production).</summary>
     public class LineProduction

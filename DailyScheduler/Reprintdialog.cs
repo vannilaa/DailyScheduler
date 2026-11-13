@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-using System.Globalization;
-using System.Linq;
+﻿using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 
@@ -105,7 +101,7 @@ namespace DailyScheduler
 
             // Show the note field only when "Lainnya" is selected.
             _noteLabel.Visibility = isOther ? Visibility.Visible : Visibility.Collapsed;
-            _note.Visibility     = isOther ? Visibility.Visible : Visibility.Collapsed;
+            _note.Visibility = isOther ? Visibility.Visible : Visibility.Collapsed;
 
             bool ok = reason != null && (!isOther || !string.IsNullOrWhiteSpace(_note.Text));
             _ok.IsEnabled = ok;

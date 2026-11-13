@@ -2,21 +2,13 @@
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Globalization;
-using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Data;
-using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
 using System.Windows.Threading;
-using System;
-using System.Collections.Generic;
-using System.Linq;
 
 namespace DailyScheduler
 {
@@ -53,7 +45,7 @@ namespace DailyScheduler
                 var (lines, products, printers) = Database.GetStartupData();
 
                 ScheduleRow.AllProducts = products.Where(p => !p.Discontinued).ToList();
-                ScheduleRow.Products    = products.ToDictionary(p => p.Barcode);
+                ScheduleRow.Products = products.ToDictionary(p => p.Barcode);
                 ScheduleRow.RebuildIndex();   // build per-field lookup for fast Recompute
 
                 cbLineProduction.ItemsSource = lines;
@@ -207,7 +199,7 @@ namespace DailyScheduler
                     }
                     else
                     {
-                        cmb.Text = string.Empty; 
+                        cmb.Text = string.Empty;
                     }
                 }
                 finally { _resettingText = false; }

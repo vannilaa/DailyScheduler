@@ -1,10 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using Microsoft.Data.SqlClient;
 using System.Data;
 using System.Globalization;
 using System.IO;
 using System.Text;
-using Microsoft.Data.SqlClient;
 
 namespace DailyScheduler
 {
@@ -130,7 +128,7 @@ namespace DailyScheduler
         /// </summary>
         public static (List<LineProduction> Lines, List<ProductInfo> Products, List<string> Printers) GetStartupData()
         {
-            var lines    = new List<LineProduction>();
+            var lines = new List<LineProduction>();
             var products = new List<ProductInfo>();
             var printers = new List<string>();
 
@@ -157,19 +155,19 @@ namespace DailyScheduler
                     while (r.Read())
                         products.Add(new ProductInfo
                         {
-                            Barcode      = r.GetString(0),
-                            DisplayName  = r.GetString(1),
-                            Customer     = Str(r, 2),
-                            Model        = Str(r, 3),
-                            Part         = Str(r, 4),
-                            JobNo        = Str(r, 5),
-                            Assembly     = Str(r, 6),
-                            QtyPerBox    = r.GetInt32(7),
+                            Barcode = r.GetString(0),
+                            DisplayName = r.GetString(1),
+                            Customer = Str(r, 2),
+                            Model = Str(r, 3),
+                            Part = Str(r, 4),
+                            JobNo = Str(r, 5),
+                            Assembly = Str(r, 6),
+                            QtyPerBox = r.GetInt32(7),
                             TargetPerJam = r.GetInt32(8),
-                            Printer      = Str(r, 9),
-                            PartNumber   = r.GetString(10),
+                            Printer = Str(r, 9),
+                            PartNumber = r.GetString(10),
                             Discontinued = r.GetBoolean(11),
-                            Position     = Str(r, 12)
+                            Position = Str(r, 12)
                         });
 
                     r.NextResult();
@@ -339,11 +337,11 @@ namespace DailyScheduler
                                .Append(",@b").Append(j).Append(",@j").Append(j)
                                .Append(",@c").Append(j).Append(",@p").Append(j).Append(')');
                             cmd.Parameters.AddWithValue("@id" + j, scheduleId);
-                            cmd.Parameters.AddWithValue("@u" + j,  item.Urutan);
-                            cmd.Parameters.AddWithValue("@b" + j,  item.Barcode);
-                            cmd.Parameters.AddWithValue("@j" + j,  item.Jumlah);
-                            cmd.Parameters.AddWithValue("@c" + j,  item.CetakBox);
-                            cmd.Parameters.AddWithValue("@p" + j,  (object)item.Printer ?? DBNull.Value);
+                            cmd.Parameters.AddWithValue("@u" + j, item.Urutan);
+                            cmd.Parameters.AddWithValue("@b" + j, item.Barcode);
+                            cmd.Parameters.AddWithValue("@j" + j, item.Jumlah);
+                            cmd.Parameters.AddWithValue("@c" + j, item.CetakBox);
+                            cmd.Parameters.AddWithValue("@p" + j, (object)item.Printer ?? DBNull.Value);
                         }
                         cmd.CommandText = sql.ToString();
                         cmd.ExecuteNonQuery();
